@@ -1,0 +1,15 @@
+diff --git a/modules/juce_audio_devices/native/juce_WASAPI_windows.cpp b/modules/juce_audio_devices/native/juce_WASAPI_windows.cpp
+index a7411f0..af74b8b 100644
+--- a/modules/juce_audio_devices/native/juce_WASAPI_windows.cpp
++++ b/modules/juce_audio_devices/native/juce_WASAPI_windows.cpp
+@@ -811,7 +811,9 @@ private:
+         static constexpr auto maxNumChannelsToQuery = static_cast<int> (AudioChannelSet::maxChannelsOfNamedLayout);
+         const auto fallbackNumChannels = defaultNumChannels;
+ 
+-        if (fallbackNumChannels >= maxNumChannelsToQuery)
++        // Shared mode always answers with the mix format, so its channel count is the
++        // answer; asking for every count, rate and sample format takes seconds.
++        if (fallbackNumChannels >= maxNumChannelsToQuery || ! isExclusiveMode (deviceMode))
+             return fallbackNumChannels;
+ 
+         auto result = fallbackNumChannels;

@@ -1,0 +1,9 @@
+# Tested with Python 3.13 on Apple Silicon (MPS): torch 2.14.1, torchaudio 2.11.0, demucs 4.1.0
+torch>=2.5
+torchaudio>=2.5
+demucs>=4.0.1
+numpy
+librosa>=0.10
+beat-this>=1.1
+onnxruntime>=1.20
+scipy

@@ -1,0 +1,68 @@
+# Builds the Windows installer (x64) on a clean Windows machine, so what it
+# needs is what a user's PC needs. The installer is kept as a download on the run.
+name: Windows
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # FFmpeg and LAME are built in MSYS2 (scripts/build-tools.mjs).
+      - uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: UCRT64
+          update: false
+          install: make diffutils mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm mingw-w64-ucrt-x86_64-pkgconf
+
+      # The tools only change when build-tools.mjs does; building FFmpeg takes a while.
+      - uses: actions/cache@v4
+        with:
+          path: native/build/tools
+          key: tools-windows-${{ hashFiles('scripts/build-tools.mjs') }}
+
+      - run: npm ci
+
+      - run: npm run tools:build
+        env:
+          MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
+
+      - run: npm run engine:build
+
+      # A clean PC has no Visual C++ Redistributable: the engine must not need it.
+      - name: Check the engine has ASIO and needs no Visual C++ runtime DLLs
+        shell: pwsh
+        run: |
+          $exe = 'native/build/NotaEngine_artefacts/Release/NotaEngine.exe'
+          $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($exe))
+          $found = [regex]::Matches($text, '(?i)(msvcp|vcruntime|concrt)140[_a-z0-9]*\.dll') | ForEach-Object Value | Sort-Object -Unique
+          if ($found) { Write-Error "NotaEngine.exe needs: $($found -join ', ')"; exit 1 }
+          # ASIO must be compiled in (JUCE_ASIO with the SDK from build-engine.mjs).
+          if ($text -notmatch 'ASIO') { Write-Error 'NotaEngine.exe was built without ASIO'; exit 1 }
+
+      - run: npm run package
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nota-windows-installer
+          path: dist/*Setup*.exe
+          retention-days: 14
+          compression-level: 0
+
+      - run: npm run typecheck
+
+      - run: npm test

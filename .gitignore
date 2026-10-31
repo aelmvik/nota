@@ -1,0 +1,23 @@
+# Dependencies and build output
+node_modules/
+out/
+dist/
+dist-next/
+
+# Native engine: JUCE is cloned and the engine built by `npm run engine:build`
+native/build/
+native/third_party/
+
+# Python environment for separation (`npm run setup:separation`)
+separation/.venv/
+__pycache__/
+*.pyc
+
+# Logs, editors, OS
+*.log
+.DS_Store
+.vscode/
+.idea/
+.claude/
+.env
+.env.*

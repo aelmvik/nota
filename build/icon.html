@@ -1,0 +1,19 @@
+<!doctype html>
+<!-- App icon source: rendered to build/icon.png and icon.icns by scripts/render-icon.cjs -->
+<html><head><meta charset="utf-8"><style>
+@font-face { font-family: 'Archivo'; src: url('../src/renderer/fonts/Archivo-Italic.ttf'); font-weight: 100 900; font-stretch: 62% 125%; font-style: italic; }
+html, body { margin: 0; width: 1024px; height: 1024px; background: transparent; }
+.tile {
+  position: absolute; left: 100px; top: 100px; width: 824px; height: 824px; border-radius: 185px;
+  background: linear-gradient(180deg, #3a5ee0 0%, #2a4ccb 100%);
+  box-shadow: 0 14px 32px rgba(0,0,0,.3), inset 0 0 0 1px rgba(0,0,0,.08);
+  overflow: hidden;
+}
+.tile::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,0) 55%); }
+.mark {
+  position: absolute; left: 238px; top: 70px;
+  display: flex; flex-direction: column;
+  font-family: 'Archivo'; font-style: italic; font-weight: 900; font-stretch: 62%;
+  font-size: 400px; line-height: 0.8; letter-spacing: -0.01em; color: #fff;
+}
+</style></head><body><div class="tile"><div class="mark"><span>nø</span><span>ta</span></div></div></body></html>

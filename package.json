@@ -1,0 +1,199 @@
+{
+  "name": "nota",
+  "productName": "Nøta",
+  "version": "1.0.0",
+  "description": "Bass practice app for macOS and Windows: separate the bass from any song, loop and slow down, and play along through your own plugins.",
+  "author": "Anton Elmvik",
+  "license": "AGPL-3.0-or-later",
+  "homepage": "https://antonelmvik.com/nota",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aelmvik/nota.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aelmvik/nota/issues"
+  },
+  "keywords": [
+    "bass",
+    "practice",
+    "stem-separation",
+    "demucs",
+    "juce",
+    "electron",
+    "audio"
+  ],
+  "private": true,
+  "main": "out/main/index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "postinstall": "node node_modules/electron/install.js",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "engine:build": "node scripts/build-engine.mjs",
+    "tools:build": "node scripts/build-tools.mjs",
+    "setup:separation": "node scripts/setup-separation.mjs",
+    "icon": "electron scripts/render-icon.cjs",
+    "package": "node scripts/package-app.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^6.0.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.4"
+  },
+  "build": {
+    "appId": "app.nota.practice",
+    "productName": "Nøta",
+    "copyright": "© 2026 Anton Elmvik",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**",
+      "package.json"
+    ],
+    "asar": true,
+    "extraResources": [
+      {
+        "from": "native/build/tools",
+        "to": "tools",
+        "filter": [
+          "*.txt"
+        ]
+      },
+      {
+        "from": "separation",
+        "to": "separation",
+        "filter": [
+          "*.py",
+          "requirements.txt",
+          "models/*"
+        ]
+      },
+      {
+        "from": "LICENSE",
+        "to": "LICENSE"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      }
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.music",
+      "identity": null,
+      "hardenedRuntime": false,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Nøta listens to your audio interface so you can hear your bass while you practice."
+      },
+      "extraResources": [
+        {
+          "from": "native/build/NotaEngine_artefacts/Release/NotaEngine.app",
+          "to": "NotaEngine.app"
+        },
+        {
+          "from": "native/build/tools",
+          "to": "tools",
+          "filter": [
+            "ffmpeg",
+            "ffprobe",
+            "uv"
+          ]
+        }
+      ],
+      "fileAssociations": [
+        {
+          "ext": "nota",
+          "name": "Nøta Project",
+          "description": "Nøta practice project",
+          "role": "Editor",
+          "isPackage": true
+        },
+        {
+          "ext": [
+            "mp3",
+            "wav",
+            "flac",
+            "ogg",
+            "oga",
+            "opus",
+            "m4a",
+            "aac",
+            "mp4",
+            "webm",
+            "aif",
+            "aiff",
+            "aifc",
+            "wma",
+            "alac",
+            "caf"
+          ],
+          "name": "Audio",
+          "description": "Audio file",
+          "role": "Viewer",
+          "rank": "Alternate"
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "extraResources": [
+        {
+          "from": "native/build/NotaEngine_artefacts/Release/NotaEngine.exe",
+          "to": "NotaEngine.exe"
+        },
+        {
+          "from": "native/build/tools",
+          "to": "tools",
+          "filter": [
+            "ffmpeg.exe",
+            "ffprobe.exe",
+            "uv.exe",
+            "vcruntime/*.dll"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Nøta",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

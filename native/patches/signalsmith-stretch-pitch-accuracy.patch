@@ -1,0 +1,73 @@
+diff --git a/signalsmith-stretch.h b/signalsmith-stretch.h
+index cd13f2e..f6bd4ee 100644
+--- a/signalsmith-stretch.h
++++ b/signalsmith-stretch.h
+@@ -555,6 +555,16 @@ private:
+ 		Complex high = getBand<member>(channel, lowIndex + 1);
+ 		return low + (high - low)*fractional;
+ 	}
++	// prevInput has been rotated by each bin's own centre frequency (over one interval), so
++	// plain interpolation blends two different rotations and skews the phase advance - the
++	// output frequency - by up to a bin.  Rotate both neighbours to the fractional position.
++	Complex getFractionalPrevInput(int channel, int lowIndex, Sample fractional) {
++		if (fractional == 0) return getFractional<&Band::prevInput>(channel, lowIndex, fractional);
++		Sample binTurn = (bandToFreq(1) - bandToFreq(0))*stft.defaultInterval()*Sample(2*M_PI);
++		Complex low = getBand<&Band::prevInput>(channel, lowIndex)*std::polar(Sample(1), fractional*binTurn);
++		Complex high = getBand<&Band::prevInput>(channel, lowIndex + 1)*std::polar(Sample(1), (fractional - 1)*binTurn);
++		return low + (high - low)*fractional;
++	}
+ 	template<Complex Band::*member>
+ 	Complex getFractional(int channel, Sample inputIndex) {
+ 		int lowIndex = static_cast<int>(std::floor(inputIndex));
+@@ -710,7 +720,7 @@ private:
+ 				prediction.input = getFractional<&Band::input>(c, lowIndex, fracIndex);
+ 
+ 				auto &outputBin = bins[b];
+-				Complex prevInput = getFractional<&Band::prevInput>(c, lowIndex, fracIndex);
++				Complex prevInput = getFractionalPrevInput(c, lowIndex, fracIndex);
+ 				Complex freqTwist = _impl::mul<true>(prediction.input, prevInput);
+ 				Complex phase = _impl::mul(outputBin.output, freqTwist);
+ 				outputBin.output = phase/(std::max(prevEnergy, prediction.energy) + noiseFloor);
+@@ -870,6 +880,23 @@ private:
+ 					++end;
+ 				}
+ 				Sample avgBand = bandSum/energySum;
++				if (blockProcess.newSpectrum) {
++					// The energy centroid is biased when neighbouring partials share a window lobe.
++					// Each bin's phase advance over one interval measures its frequency instead.
++					Sample binTurn = (bandToFreq(1) - bandToFreq(0))*stft.defaultInterval();
++					Sample freqSum = 0, weightSum = 0;
++					for (int b = start; b < end; ++b) {
++						Complex twist = 0;
++						for (int c = 0; c < channels; ++c) {
++							auto &bin = bandsForChannel(c)[b];
++							twist += _impl::mul<true>(bin.input, bin.prevInput);
++						}
++						Sample cycles = std::arg(twist)/Sample(2*M_PI); // offset from the bin centre
++						freqSum += energy[b]*(b + cycles/binTurn);
++						weightSum += energy[b];
++					}
++					if (weightSum > 0) avgBand = freqSum/weightSum;
++				}
+ 				Sample avgFreq = bandToFreq(avgBand);
+ 				peaks.emplace_back(Peak{avgBand, freqToBand(mapFreq(avgFreq))});
+ 
+@@ -900,11 +927,16 @@ private:
+ 			int startBin = std::max(0, static_cast<int>(std::ceil(prev.output)));
+ 			int endBin = std::min(bands, static_cast<int>(std::ceil(next.output)));
+ 			for (int b = startBin; b < endBin; ++b) {
++				// Keep the map's slope at exactly 1 across each peak's main lobe (otherwise the
++				// partial's bins get slightly different frequencies and its pitch drifts with
++				// the shift), and move between the peaks' offsets in the middle half only.
++				constexpr Sample margin = Sample(0.25);
+ 				Sample r = (b - prev.output)*rangeScale;
+-				Sample h = r*r*(3 - 2*r);
++				r = std::min<Sample>(1, std::max<Sample>(0, (r - margin)/(1 - 2*margin)));
++				Sample h = r*r*r*(10 + r*(6*r - 15));
+ 				Sample outB = b + outOffset + h*outScale;
+ 				
+-				Sample gradH = 6*r*(1 - r);
++				Sample gradH = 30*r*r*(1 - r)*(1 - r)/(1 - 2*margin);
+ 				Sample gradB = 1 + gradH*gradScale;
+ 				
+ 				outputMap[b] = {outB, gradB};

@@ -1,0 +1,2 @@
+# Same line endings on every machine (Git for Windows converts by default)
+* text=auto eol=lf
