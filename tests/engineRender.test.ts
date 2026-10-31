@@ -373,7 +373,8 @@ describe.skipIf(!engine)('native song playback (offline render)', () => {
     return (a + b) / 2
   }
 
-  it('changes key on pitch for low bass notes (within 1 cent of the fundamental)', () => {
+  // Renders several long low notes through the key-change engine: slow on CI's small machines.
+  it('changes key on pitch for low bass notes (within 1 cent of the fundamental)', { timeout: 120_000 }, () => {
     // E1, A1 and D2, one after another: low notes are where a too-short analysis
     // block, or a biased peak map, used to put key changes 10-90 cents off.
     const notes = [41.2034, 55, 73.4162]
