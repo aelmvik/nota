@@ -34,7 +34,13 @@ A bass practice app for macOS (Apple Silicon) and Windows. Import the songs you 
 
 Get the latest version from the [Releases](../../releases) page. Nøta is free.
 
-- **Mac** (macOS 13 or later, Apple Silicon): unzip and move **Nøta** to Applications. The app isn't notarised by Apple yet, so the first time macOS won't open it: go to **System Settings → Privacy & Security** and click **Open Anyway** (or run `xattr -dr com.apple.quarantine /Applications/Nøta.app` in Terminal).
+- **Mac** (macOS 13 or later, Apple Silicon): unzip and move **Nøta** to Applications. The app isn't notarised by Apple yet, so macOS says it's "damaged" or can't be verified. To open it, run this once in Terminal:
+
+  ```bash
+  xattr -dr com.apple.quarantine /Applications/Nøta.app
+  ```
+
+  It removes the "downloaded from the internet" mark that makes macOS block the app. If macOS says it can't verify Nøta (rather than "damaged"), **System Settings → Privacy & Security → Open Anyway** works too.
 - **Windows** (10 or 11, 64-bit): run **Nøta Setup**. It installs for your user only, without an administrator password. The installer isn't signed yet, so Windows says "Windows protected your PC" the first time: click **More info**, then **Run anyway**.
 
 **First launch:**
