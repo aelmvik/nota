@@ -169,6 +169,8 @@ describe.skipIf(!hasFfmpeg)('separation queue with asset cache', () => {
     const { events, listener } = collect()
     const real = new FakeProvider()
     let first = true
+    let started!: () => void
+    const firstStarted = new Promise<void>((r) => (started = r))
     // Like Demucs: after a cancel the process takes a while to exit.
     const provider: SeparationProvider = {
       name: 'Slow stop',
@@ -177,12 +179,15 @@ describe.skipIf(!hasFfmpeg)('separation queue with asset cache', () => {
       separate: (req) =>
         first
           ? ((first = false),
-            new Promise((_, reject) => req.signal.addEventListener('abort', () => setTimeout(() => reject(new SeparationCancelledError()), 100))))
+            new Promise((_, reject) => {
+              req.signal.addEventListener('abort', () => setTimeout(() => reject(new SeparationCancelledError()), 100))
+              started()
+            }))
           : real.separate(req)
     }
     const queue = new SeparationQueue(provider, cache, listener)
     await queue.enqueue({ hash: 'same', inputPath: '/dev/null', durationSec: 2, label: 'A' })
-    await new Promise((r) => setTimeout(r, 10))
+    await firstStarted // a fixed wait can fall before the job reaches the provider on a slow machine
     queue.clear() // project closed
     await queue.enqueue({ hash: 'same', inputPath: '/dev/null', durationSec: 2, label: 'A' }) // the next project has it too
     await queue.whenIdle()
