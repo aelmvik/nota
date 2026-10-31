@@ -39,7 +39,8 @@
     "tools:build": "node scripts/build-tools.mjs",
     "setup:separation": "node scripts/setup-separation.mjs",
     "icon": "electron scripts/render-icon.cjs",
-    "package": "node scripts/package-app.mjs"
+    "package": "node scripts/package-app.mjs",
+    "demo:build": "vite build --config demo/vite.config.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

@@ -24,6 +24,18 @@ beforeAll(() => {
 })
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
+/** Windows (antivirus, the search indexer) can hold a just-closed folder for a moment. */
+async function renameWhenFree(from: string, to: string) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return renameSync(from, to)
+    } catch (err) {
+      if (attempt >= 30 || !['EPERM', 'EBUSY', 'EACCES'].includes((err as NodeJS.ErrnoException).code ?? '')) throw err
+      await new Promise((r) => setTimeout(r, 100))
+    }
+  }
+}
+
 /** A stereo sine, written here as WAV or AIFF, or converted by ffmpeg (the bundled ffmpeg has no lavfi or AIFF muxer). */
 function tone(path: string, seconds: number, freq = 220, volume = 0.3) {
   const rate = 44100
@@ -287,7 +299,7 @@ describe.skipIf(!hasFfmpeg)('project packages', () => {
 
     // Move the whole project: the copied song still resolves.
     const moved = join(root, 'Elsewhere.nota')
-    renameSync(pkg, moved)
+    await renameWhenFree(pkg, moved)
     const svc2 = make(root)
     await svc2.open(moved)
     expect(svc2.project!.songs[0].source).toMatchObject({ path: join(moved, 'Songs', 'Tune.wav'), missing: false })

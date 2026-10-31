@@ -4,7 +4,7 @@ A bass practice app for macOS (Apple Silicon) and Windows. Import the songs you 
 
 **Website:** [antonelmvik.com/nota](https://antonelmvik.com/nota) · **Download:** [latest release](../../releases/latest)
 
-![Nøta with a song's bass line in the Notes view, a loop, and the Mixer with two effects](docs/images/notes-and-mixer.jpg)
+![Nøta with a song's bass line in the Notes view, a loop, and the Mixer with two effects](docs/images/notes-and-mixer.png)
 
 | Mode | What you hear |
 | --- | --- |
@@ -28,7 +28,7 @@ A bass practice app for macOS (Apple Silicon) and Windows. Import the songs you 
 - **Light and dark themes**, in three colours.
 - **Low latency on Windows** through your interface's ASIO driver.
 
-![Nøta in dark mode: the playlist, a song's waveform with its beat grid, and the Mixer](docs/images/waveform-dark.jpg)
+![Nøta in dark mode: the playlist, a song's waveform with its beat grid, and the Mixer](docs/images/waveform-dark.png)
 
 ## Download
 

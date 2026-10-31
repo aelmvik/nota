@@ -15,5 +15,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src", "tests", "electron.vite.config.ts", "vitest.config.mts"]
+  "include": ["src", "tests", "electron.vite.config.ts", "vitest.config.mts", "demo"]
 }

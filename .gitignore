@@ -4,6 +4,10 @@ out/
 dist/
 dist-next/
 
+# The website demo's build and its data (made by demo/export-data.ts)
+demo/dist/
+demo/public/data/
+
 # Native engine: JUCE is cloned and the engine built by `npm run engine:build`
 native/build/
 native/third_party/
