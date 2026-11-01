@@ -5,6 +5,7 @@
  #include <CoreAudio/CoreAudio.h>
 #elif JUCE_WINDOWS
  #include "WindowsDevices.h"
+ #include "WindowsForeground.h"
 #endif
 
 namespace
@@ -310,8 +311,17 @@ public:
         setResizable (editor->isResizable(), false);
         centreWithSize (getWidth(), getHeight());
         setVisible (true);
+        bringToFront();
+    }
+
+    /** In front of Nøta's window: the engine is a separate app, behind it. */
+    void bringToFront()
+    {
         juce::Process::makeForegroundProcess();
         toFront (true);
+       #if JUCE_WINDOWS
+        bringToForeground (getWindowHandle());
+       #endif
     }
 
     void closeButtonPressed() override
@@ -1268,8 +1278,7 @@ juce::String AudioEngine::openEditor (const juce::String& slotId)
     {
         if (w->slotId == slotId)
         {
-            juce::Process::makeForegroundProcess();
-            w->toFront (true);
+            w->bringToFront();
             return {};
         }
     }
