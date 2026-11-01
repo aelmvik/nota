@@ -99,7 +99,7 @@ Per-song settings (speed, key, loops, grid) live on the song. Levels and effects
 
 ## Building from source
 
-Requirements on a Mac: Node 20+, Xcode or the Command Line Tools, and CMake (`brew install cmake`). On Windows: Node 20+, Visual Studio 2022 Build Tools (C++), CMake, Git, and [MSYS2](https://www.msys2.org) for building FFmpeg (`npm run tools:build` lists the packages it needs if they're missing). FFmpeg and Python don't need to be installed: Nøta builds and bundles its own.
+Requirements on a Mac: Node 20+, Xcode or the Command Line Tools, and CMake (`brew install cmake`). On Windows: Node 20+, Visual Studio 2022 Build Tools (C++), CMake, Git, and [MSYS2](https://www.msys2.org) for building FFmpeg (`npm run tools:build` lists the packages it needs if they're missing). On Linux (in progress, see [Linux](#linux)), on Debian or Ubuntu: `sudo apt install git build-essential cmake pkg-config nodejs npm nasm libasound2-dev libjack-jackd2-dev libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxcomposite-dev libfreetype-dev libfontconfig1-dev`, and `pipewire-jack` for JACK on a PipeWire desktop. FFmpeg and Python don't need to be installed: Nøta builds and bundles its own.
 
 ```bash
 npm install
@@ -120,12 +120,15 @@ Environment overrides for development: `NOTA_ENGINE_PATH`, `NOTA_PYTHON`, `NOTA_
 
 ### Linux
 
-Linux isn't supported yet, but nothing in Nøta is tied to macOS or Windows (Electron, JUCE, PyTorch and ONNX Runtime all run there), and the platform-specific parts are kept apart. A port needs:
+Linux isn't supported yet, but a port is under way, and the platform-specific parts are kept apart (`JUCE_LINUX` in the engine, `process.platform === 'linux'` in the app). Working so far, on x64 with GCC:
 
-- **Engine:** builds with GCC or Clang once the ALSA, JACK, X11 and FreeType development packages are installed. Linux-only code goes behind `JUCE_LINUX`; device and path answers for Linux are already in `src/main/platform.ts` (VST3 folders `~/.vst3`, `/usr/lib/vst3`, `/usr/local/lib/vst3`). JACK is the low-latency route there, and the Audio settings already offer ALSA and JACK when JUCE has them.
-- **Tools:** a Linux branch in `scripts/build-tools.mjs` (the same audio-only FFmpeg flags, plain GCC) and uv's Linux download.
+- **Engine:** `npm run engine:build` builds with GCC and passes the playback tests. ALSA and JACK are both offered. ALSA's device list is cut down to one entry per card and device, and names read "System default (PipeWire …)" or "card, device". JACK is the low-latency route: on a PipeWire desktop, install `pipewire-jack`. The app puts PipeWire's JACK library first when it starts the engine (Debian keeps it out of the default path), and the JACK buffer menu sets PipeWire's buffer size (`PIPEWIRE_LATENCY`). Linux doesn't say what a device is, so the system default, the sound server and the computer's own sound card are treated as a built-in mic and speakers: their input only opens while something listens, and Monitor asks first.
+- **Tools:** `npm run tools:build` builds the same audio-only FFmpeg and LAME with GCC (it needs `nasm` on x64) and fetches uv's Linux release. With them the service tests run too.
+
+Still to do:
+
 - **Python:** PyPI's Linux PyTorch comes with NVIDIA's CUDA libraries (about 2.5 GB). Install the CPU build unless there's an NVIDIA GPU (and add CUDA to `separation/analyze.py`, which only tries Apple's GPU).
-- **Packaging:** an AppImage (and maybe a `.deb`) target for electron-builder, with its own `extraResources`.
+- **Packaging:** an AppImage (and maybe a `.deb`) target for electron-builder, with its own `extraResources`. The engine and FFmpeg need the glibc they were built against (2.38 when built on Debian 13), so release builds belong on an older distribution.
 
 The window and menus already work off the Mac (the brand bar is the title bar, the menu is hidden but keeps its shortcuts, and Alt takes ⌘'s place in gestures; see `src/renderer/platform.ts`).
 

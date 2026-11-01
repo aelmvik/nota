@@ -10,7 +10,8 @@
 //
 // Sources go into native/third_party; each tool is only rebuilt when missing.
 // On Windows the same FFmpeg and LAME are built in MSYS2 (buildWindowsTools at
-// the end); uv is a pinned, checksummed release.
+// the end); uv is a pinned, checksummed release. On Linux they're built with the
+// system's GCC, as on the Mac (x64 and arm64).
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
@@ -64,6 +65,11 @@ const FFMPEG_AUDIO_ONLY = [
 // Windows (x64): FFmpeg and LAME are built the same way inside MSYS2's UCRT64
 // environment (MinGW-w64 GCC); uv is a prebuilt release.
 const MSYS2_PACKAGES = ['make', 'diffutils', 'mingw-w64-ucrt-x86_64-gcc', 'mingw-w64-ucrt-x86_64-nasm', 'mingw-w64-ucrt-x86_64-pkgconf']
+// Linux: uv's glibc builds, for the machine's architecture.
+const UV_LINUX = {
+  x64: { url: `https://github.com/astral-sh/uv/releases/download/${UV.version}/uv-x86_64-unknown-linux-gnu.tar.gz`, sha256: '23bf5552d220e0842b65c862097b2ebaeba0064b74eda5e565e77fd25969d8c8' },
+  arm64: { url: `https://github.com/astral-sh/uv/releases/download/${UV.version}/uv-aarch64-unknown-linux-gnu.tar.gz`, sha256: '0804e9b164c64b6914182d5920c08551958a095986f10a3731056df701126436' }
+}
 const UV_WIN = {
   url: `https://github.com/astral-sh/uv/releases/download/${UV.version}/uv-x86_64-pc-windows-msvc.zip`,
   sha256: '6dbb02d79e419522f1c500f0adb1cddcff0cda7d59b0d66ea7f5e3b4a1b2f5f0'
@@ -85,9 +91,20 @@ if (process.platform === 'win32') {
   process.exit(0)
 }
 
+const linux = process.platform === 'linux'
+if (linux && !UV_LINUX[process.arch]) throw new Error(`Linux builds are for x64 and arm64, not ${process.arch}`)
+// FFmpeg's x86 assembly needs NASM (as on Windows); arm64 assembly needs nothing extra.
+if (linux && process.arch === 'x64') {
+  try {
+    execFileSync('nasm', ['-v'], { stdio: 'ignore' })
+  } catch {
+    throw new Error('Building FFmpeg needs NASM: sudo apt install nasm (or your distribution\'s package)')
+  }
+}
+
 mkdirSync(thirdParty, { recursive: true })
 mkdirSync(out, { recursive: true })
-const cflags = `-arch arm64 -mmacosx-version-min=${MACOS_MIN} -O2`
+const cflags = linux ? '-O2' : `-arch arm64 -mmacosx-version-min=${MACOS_MIN} -O2`
 
 // ---- LAME (static library for FFmpeg's MP3 encoder) ----
 const lameSrc = join(thirdParty, `lame-${LAME.version}`)
@@ -99,10 +116,12 @@ if (!existsSync(join(lamePrefix, 'lib', 'libmp3lame.a'))) {
   rmSync(lameSrc, { recursive: true, force: true })
   run('tar', ['-xzf', tgz, '-C', thirdParty])
   // 3.100 lists a symbol it no longer defines; the exports file breaks linking on macOS.
+  // (GNU sed on Linux takes -i without a suffix.)
   const sym = join(lameSrc, 'include', 'libmp3lame.sym')
-  execFileSync('sed', ['-i', '', '/lame_init_old/d', sym])
+  execFileSync('sed', linux ? ['-i', '/lame_init_old/d', sym] : ['-i', '', '/lame_init_old/d', sym])
   const env = { ...process.env, CFLAGS: cflags }
-  run('./configure', ['--prefix', lamePrefix, '--host=aarch64-apple-darwin', '--disable-shared', '--enable-static', '--disable-frontend', '--disable-decoder', '--disable-dependency-tracking'], lameSrc, env)
+  const host = linux ? [] : ['--host=aarch64-apple-darwin']
+  run('./configure', ['--prefix', lamePrefix, ...host, '--disable-shared', '--enable-static', '--disable-frontend', '--disable-decoder', '--disable-dependency-tracking'], lameSrc, env)
   run('make', ['-j', jobs], lameSrc, env)
   run('make', ['install'], lameSrc, env)
 }
@@ -117,10 +136,9 @@ if (!existsSync(join(out, 'ffmpeg')) || !existsSync(join(out, 'ffprobe'))) {
   run(
     './configure',
     [
-      '--arch=arm64',
-      '--cc=clang',
+      ...(linux ? ['--cc=gcc'] : ['--arch=arm64', '--cc=clang']),
       `--extra-cflags=${cflags} -I${join(lamePrefix, 'include')}`,
-      `--extra-ldflags=-arch arm64 -mmacosx-version-min=${MACOS_MIN} -L${join(lamePrefix, 'lib')}`,
+      `--extra-ldflags=${linux ? '' : `-arch arm64 -mmacosx-version-min=${MACOS_MIN} `}-L${join(lamePrefix, 'lib')}`,
       ...FFMPEG_AUDIO_ONLY
     ],
     ffSrc
@@ -135,7 +153,8 @@ if (!existsSync(join(out, 'ffmpeg')) || !existsSync(join(out, 'ffprobe'))) {
 if (!existsSync(join(out, 'uv'))) {
   const tgz = join(thirdParty, `uv-${UV.version}.tar.gz`)
   console.log(`Fetching uv ${UV.version} …`)
-  download(UV.url, tgz, UV.sha256)
+  const release = linux ? UV_LINUX[process.arch] : UV
+  download(release.url, tgz, release.sha256)
   const dir = join(thirdParty, `uv-${UV.version}`)
   rmSync(dir, { recursive: true, force: true })
   mkdirSync(dir)
