@@ -476,6 +476,11 @@ juce::var AudioEngine::getDeviceState()
        #if JUCE_LINUX
         if (deviceManager.getCurrentAudioDeviceType() == "JACK")
             totalSamples -= bs; // JACK's latency ranges include the period
+       #elif JUCE_WINDOWS
+        // ASIO's latencies (and JUCE's for WASAPI) already count each direction's buffer:
+        // measured with a loopback cable, the round trip is input + output.
+        totalSamples -= bs;
+        state->setProperty ("latencyIncludesBuffer", true);
        #endif
         state->setProperty ("outputLatencySamples", device->getOutputLatencyInSamples());
         state->setProperty ("pluginLatencySamples", pluginLatency);
@@ -1382,8 +1387,11 @@ juce::var AudioEngine::stopTake()
     json << "{\"sampleRate\":" << takeRate << ",\"frames\":" << takeFrames
          << ",\"dropped\":" << (takeDropped.load() ? "true" : "false")
          << ",\"inputLatency\":" << inputLatency << ",\"outputLatency\":" << outputLatency
-         << ",\"bufferSize\":" << bufferSize << ",\"outputChainLatency\":" << outputChainLatency.load()
-         << ",\"marks\":[";
+         << ",\"bufferSize\":" << bufferSize << ",\"outputChainLatency\":" << outputChainLatency.load();
+   #if JUCE_WINDOWS
+    json << ",\"latencyIncludesBuffer\":true"; // the driver's latencies count the buffers (see getDeviceState)
+   #endif
+    json << ",\"marks\":[";
     for (size_t i = 0; i < count; ++i)
     {
         const auto& m = takeMarks[i];

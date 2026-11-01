@@ -18,6 +18,8 @@ export interface TakeMarks {
   outputLatency: number
   bufferSize: number
   outputChainLatency: number
+  /** The driver's latencies already count the buffers (Windows: ASIO, and WASAPI through JUCE) */
+  latencyIncludesBuffer?: boolean
   /** [take frames recorded by the end of an audio block, song position then (s), playing 1/0] */
   marks: [number, number, number][]
 }
@@ -41,9 +43,10 @@ export type TakeState =
  * Frames between the song being rendered and you being heard playing along
  * with it: the song goes out through the output buffer, the driver and the
  * output effects; your bass comes back through the driver and an input buffer.
+ * Where the driver's latencies include the buffers, they aren't added again.
  */
 export function roundTripFrames(m: TakeMarks): number {
-  return m.inputLatency + m.outputLatency + 2 * m.bufferSize + m.outputChainLatency
+  return m.inputLatency + m.outputLatency + (m.latencyIncludesBuffer ? 0 : 2 * m.bufferSize) + m.outputChainLatency
 }
 
 interface Pass {

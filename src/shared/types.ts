@@ -311,6 +311,8 @@ export interface EngineDeviceState {
   inputChannelNames?: string[]
   outputChannelNames?: string[]
   roundTripLatencyMs?: number
+  /** Windows: the input and output latencies already count the buffers, so the round trip is their sum */
+  latencyIncludesBuffer?: boolean
   /** Latency the interface and its driver report, per direction */
   inputLatencySamples?: number
   outputLatencySamples?: number

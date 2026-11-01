@@ -119,11 +119,13 @@ function RailButton({ icon, label, onClick, active, title }: { icon: IconName; l
 function latencyBreakdown(d: EngineDeviceState) {
   const sr = d.sampleRate ?? 0
   const ms = (samples = 0) => (sr ? `${((1000 * samples) / sr).toFixed(1)} ms` : '—')
+  // Windows: the driver's figures already count the buffer, one in each direction.
+  const parts = d.latencyIncludesBuffer ? 'interface, driver and buffer' : 'interface and driver'
   return {
     rows: [
-      ['Input (interface and driver)', ms(d.inputLatencySamples)],
-      [`Buffer (${d.bufferSize} samples)`, ms(d.bufferSize ?? 0)],
-      ['Output (interface and driver)', ms(d.outputLatencySamples)],
+      [`Input (${parts})`, ms(d.inputLatencySamples)],
+      ...(d.latencyIncludesBuffer ? [] : [[`Buffer (${d.bufferSize} samples)`, ms(d.bufferSize ?? 0)]]),
+      [`Output (${parts})`, ms(d.outputLatencySamples)],
       ['Plug-ins', ms(d.pluginLatencySamples)]
     ],
     tips: [

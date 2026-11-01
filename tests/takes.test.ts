@@ -43,4 +43,11 @@ describe('takes', () => {
     expect(takeFromRecording(m, [note(3, 3.5, 40)]).notes[0].start).toBeCloseTo(2.8, 2)
   })
 
+  it('adds the buffers only where the driver latencies leave them out', () => {
+    const m = { ...marks([[10, 0, 1]], 0), inputLatency: 469, outputLatency: 331, bufferSize: 256 }
+    expect(roundTripFrames(m)).toBe(469 + 331 + 2 * 256)
+    // Windows (ASIO; measured with a loopback cable): the round trip is input + output.
+    expect(roundTripFrames({ ...m, latencyIncludesBuffer: true })).toBe(469 + 331)
+  })
+
 })
