@@ -65,6 +65,7 @@ const api: NotaApi = {
     restart: () => invoke('engine:restart'),
     setDevice: (req) => invoke('engine:setDevice', req),
     showControlPanel: () => invoke('engine:showControlPanel'),
+    useProAudio: () => invoke('engine:useProAudio'),
     setMonitoring: (enabled) => invoke('engine:setMonitoring', enabled),
     setInputTrim: (db) => invoke('engine:setInputTrim', db),
     setMonitorLevel: (db) => invoke('engine:setMonitorLevel', db),

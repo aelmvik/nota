@@ -139,6 +139,8 @@ export interface NotaApi {
     setDevice(req: DeviceRequest): Promise<EngineDeviceState>
     /** Opens the driver's own settings window (ASIO) */
     showControlPanel(): Promise<EngineDeviceState>
+    /** Linux: the input's card in PipeWire's Pro Audio profile, selected again from Input 1 */
+    useProAudio(): Promise<EngineDeviceState>
     setMonitoring(enabled: boolean): Promise<void>
     setInputTrim(db: number): Promise<void>
     setMonitorLevel(db: number): Promise<void>

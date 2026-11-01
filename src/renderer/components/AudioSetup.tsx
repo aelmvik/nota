@@ -26,6 +26,9 @@ const DRIVER_HELP: Record<string, string> = {
   JACK: 'The low-latency route (PipeWire’s or JACK’s own server). Use this to hear your bass live.'
 }
 
+/** Channel names the engine gives speaker-named JACK ports (see jackChannelNames in AudioEngine.cpp). */
+const SPEAKER_NAMES = new Set(['Front left', 'Front right', 'Centre', 'LFE', 'Rear left', 'Rear right', 'Side left', 'Side right', 'Rear centre'])
+
 export const formatRate = (r: number) => `${(r / 1000).toFixed(r % 1000 ? 1 : 0)} kHz`
 
 /** Opens Settings, where Audio comes first. */
@@ -97,6 +100,21 @@ export function AudioSection() {
       <Select value={channels.value} placeholder="Choose an input" options={channels.options} onChange={(v) => void setDevice({ inputChannels: channels.toChannels(v) })} />
     </Field>
   )
+  // Linux: PipeWire runs a multichannel interface as surround sound by default, and
+  // the engine then names its inputs after speakers, in an order that isn't the hardware's.
+  const surround = d.deviceType === 'JACK' && (d.inputChannelNames?.length ?? 0) > 2 && !!d.inputChannelNames?.some((n) => SPEAKER_NAMES.has(n))
+  const surroundField = surround && (
+    <div className="set-row">
+      <div className="set-help">
+        Linux runs this interface as surround sound, so its inputs are named after speakers, in an order that may not match the numbers on it. As an audio interface (PipeWire’s Pro Audio profile, for every app) they’re Input 1, 2, … as on the hardware.
+      </div>
+      <div className="set-buttons">
+        <Button size="sm" icon="sliders" onClick={() => void attempt(() => window.nota.engine.useProAudio(), 'Audio interface')}>
+          Use as audio interface
+        </Button>
+      </div>
+    </div>
+  )
 
   return (
     <>
@@ -118,6 +136,7 @@ export function AudioSection() {
             <Select value={d.inputDevice ?? null} placeholder="No input" options={devices(d.inputDevices)} onChange={(inputDevice) => void setDevice({ inputDevice })} />
           </Field>
           {channelField}
+          {surroundField}
           <Field label="Output" help="Headphones or your interface: the song and your bass.">
             <Select value={d.outputDevice ?? null} placeholder="No output" options={devices(d.outputDevices)} onChange={(outputDevice) => void setDevice({ outputDevice })} />
           </Field>

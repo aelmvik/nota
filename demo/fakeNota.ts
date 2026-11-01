@@ -301,6 +301,7 @@ export async function createFakeNota(base: string): Promise<NotaApi> {
         return Promise.resolve(engineSnapshot().device!)
       },
       showControlPanel: () => Promise.resolve(engineSnapshot().device!),
+      useProAudio: () => Promise.resolve(engineSnapshot().device!),
       setMonitoring: (enabled) => {
         monitoring = enabled
         engineChanged()

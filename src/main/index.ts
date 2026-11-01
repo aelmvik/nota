@@ -588,6 +588,7 @@ function registerIpc() {
   handle('engine:restart', () => engine.restart())
   handle('engine:setDevice', (req: DeviceRequest) => audio.setDevice(req))
   handle('engine:showControlPanel', () => audio.showControlPanel())
+  handle('engine:useProAudio', () => audio.useProAudio())
   handle('engine:setMonitoring', (enabled: boolean) => audio.setMonitoring(enabled))
   handle('engine:setInputTrim', (db: number) => projects.undoable('Trim', () => audio.setInputTrim(db)))
   handle('engine:setMonitorLevel', (db: number) => projects.undoable('Monitor level', () => audio.setMonitorLevel(db)))

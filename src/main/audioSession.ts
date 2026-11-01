@@ -5,6 +5,7 @@ import * as P from '../shared/project'
 import type { AudioConfig, EffectChain, EffectSlot, EngineDeviceState, PluginInfo, Project } from '../shared/types'
 import type { EngineHost } from './engineHost'
 import type { ProjectService } from './projectService'
+import { useProAudio } from './pipewire'
 
 // Keeps the native engine in step with the open project: device selection,
 // levels and the effect chain (including plugin state) are restored when a
@@ -119,6 +120,26 @@ export class AudioSession extends EventEmitter {
     const state = await this.applyDevice({ ...req }, true)
     // Switching devices restarts the stream; monitoring stays as it was.
     return state
+  }
+
+  /**
+   * Linux: puts the input's sound card in PipeWire's Pro Audio profile, so its
+   * inputs are numbered as on the hardware, then selects it again under its new
+   * names (the output too, when it's the same card), from Input 1.
+   */
+  async useProAudio(): Promise<EngineDeviceState> {
+    const current = this.engine.snapshot().device ?? {}
+    if (process.platform !== 'linux' || current.deviceType !== 'JACK' || !current.inputDevice) throw new Error('Only for a JACK input on Linux')
+    const names = await useProAudio(current.inputDevice)
+    // JACK lists the new client a moment after PipeWire creates it.
+    for (let i = 0; i < 20; i++) {
+      const state = await this.engine.call<EngineDeviceState>('getDeviceState')
+      this.engine.updateDevice(state)
+      if (names.input && state.inputDevices?.includes(names.input)) break
+      await new Promise((r) => setTimeout(r, 250))
+    }
+    const sameCard = current.outputDevice === current.inputDevice
+    return this.applyDevice({ inputDevice: names.input ?? undefined, ...(sameCard && names.output ? { outputDevice: names.output } : {}), inputChannels: [0] }, true)
   }
 
   /** The driver's own settings window (ASIO); its buffer size and so on are kept afterwards. */
