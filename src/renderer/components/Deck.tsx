@@ -113,8 +113,21 @@ const VIEW_DEFAULT = 140
 const VIEW_MIN = 90
 /** How tall the deck grows by itself into space a short playlist leaves empty. */
 const VIEW_AUTO_MAX = 560
-/** The playlist keeps room for its header and about one song row. */
+/** The playlist keeps room for its header and about one song row; the rest of its songs scroll. */
 const PLAYLIST_MIN = 100
+
+/**
+ * The tallest the waveform can be: the workspace (the playlist above, the deck
+ * below), less the deck's own bars and controls and the playlist's minimum.
+ * Measured, so it holds however the deck's controls wrap, and it stays put while you drag.
+ */
+function maxViewHeight(): number {
+  const workspace = document.querySelector<HTMLElement>('.workspace')
+  const deck = workspace?.querySelector<HTMLElement>('.deck')
+  const view = deck?.querySelector<HTMLElement>('.deck-view')
+  if (!workspace || !deck || !view) return Infinity
+  return workspace.clientHeight - (deck.offsetHeight - view.offsetHeight) - PLAYLIST_MIN
+}
 
 /**
  * The deck's top edge: drag it up to make the waveform (or notes) taller and
@@ -125,8 +138,7 @@ function ResizeHandle({ height, onChange, onReset }: { height: number; onChange:
     e.preventDefault()
     const y0 = e.clientY
     const h0 = height
-    const main = document.querySelector('.main') as HTMLElement | null
-    const max = h0 + Math.max(0, (main?.clientHeight ?? 0) - PLAYLIST_MIN)
+    const max = maxViewHeight()
     const move = (ev: PointerEvent) => onChange(Math.round(Math.min(max, Math.max(VIEW_MIN, h0 + (y0 - ev.clientY)))))
     const up = () => {
       window.removeEventListener('pointermove', move)
@@ -150,9 +162,6 @@ function ResizeHandle({ height, onChange, onReset }: { height: number; onChange:
   )
 }
 
-/** Height of the rest of the window (bars, deck controls, input section) plus the playlist's minimum. */
-const CHROME_HEIGHT = 420 + PLAYLIST_MIN
-
 /** Space under the playlist's last row that the songs don't need (negative when they scroll). */
 function playlistFreeSpace(): number {
   const main = document.querySelector<HTMLElement>('.workspace .main')
@@ -174,12 +183,20 @@ function useViewHeight(songCount: number): [number, (h: number) => void, () => v
   const [manual, setManual] = useState<number | null>(() => readPref<number | null>('deckHeight', null))
   const [auto, setAuto] = useState(VIEW_DEFAULT)
   const [winH, setWinH] = useState(window.innerHeight)
-  const max = winH - CHROME_HEIGHT
+  // Measured, not estimated: the deck's controls take more or less room with the window's width.
+  const [max, setMax] = useState(Infinity)
   useEffect(() => {
     const on = () => setWinH(window.innerHeight)
     window.addEventListener('resize', on)
     return () => window.removeEventListener('resize', on)
   }, [])
+  useLayoutEffect(() => {
+    const measure = () => setMax(maxViewHeight())
+    measure()
+    const observer = new ResizeObserver(measure)
+    for (const el of document.querySelectorAll('.workspace, .workspace .deck')) observer.observe(el)
+    return () => observer.disconnect()
+  }, [winH])
   // The deck and the playlist share the height, so the current height plus the
   // playlist's free space is where it settles: one step, no back and forth.
   useLayoutEffect(() => {
