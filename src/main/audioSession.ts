@@ -304,7 +304,7 @@ export class AudioSession extends EventEmitter {
     void this.refreshDevice()
   }
 
-  /** Open the effect's window, or close it if it's open. */
+  /** Open the effect's window, bring it back in front of Nøta, or close it if it was in front. */
   async toggleEditor(slotId: string) {
     await this.engine.call('toggleEditor', { slotId })
   }

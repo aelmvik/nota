@@ -174,7 +174,7 @@ export interface NotaApi {
     remove(slotId: string): Promise<void>
     move(slotId: string, toIndex: number): Promise<void>
     setBypass(slotId: string, bypassed: boolean): Promise<void>
-    /** Opens the effect's window, or closes it if it's open */
+    /** Opens the effect's window, brings it back in front, or closes it if it was in front */
     toggleEditor(slotId: string): Promise<void>
     slotErrors(): Promise<Record<string, string>>
     onSlotErrors(cb: (errors: Record<string, string>) => void): () => void
