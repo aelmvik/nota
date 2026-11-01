@@ -153,6 +153,20 @@ namespace
 
     int inputChannelCount (const juce::String&) { return 0; }
 
+    // PipeWire's JACK runs at the graph's buffer size (its quantum, 1024 by default),
+    // and a client asks for a smaller one with PIPEWIRE_LATENCY when it opens. JUCE
+    // only offers the current size, so offer the usual ones; a JACK server other than
+    // PipeWire ignores the request and keeps its own size, which is what's reported.
+    const juce::Array<int> jackBufferSizes { 64, 128, 256, 512, 1024, 2048 };
+
+    void requestPipeWireBuffer (int bufferSize, double sampleRate)
+    {
+        if (bufferSize <= 0)
+            return;
+        const auto latency = juce::String (bufferSize) + "/" + juce::String (juce::roundToInt (sampleRate > 0 ? sampleRate : 48000.0));
+        setenv ("PIPEWIRE_LATENCY", latency.toRawUTF8(), 1);
+    }
+
     /**
      * ALSA lists each sound card several times: surround layouts, dmix and dsnoop,
      * and the raw hardware device ("card, device; description"). Keep one entry per
@@ -369,6 +383,16 @@ juce::var AudioEngine::getDeviceState()
         state->setProperty ("sampleRate", sr);
         state->setProperty ("bufferSize", bs);
         state->setProperty ("availableSampleRates", toVarArray (device->getAvailableSampleRates()));
+       #if JUCE_LINUX
+        if (deviceManager.getCurrentAudioDeviceType() == "JACK")
+        {
+            auto sizes = jackBufferSizes;
+            sizes.addIfNotAlreadyThere (bs);
+            sizes.sort();
+            state->setProperty ("availableBufferSizes", toVarArray (sizes));
+        }
+        else
+       #endif
         state->setProperty ("availableBufferSizes", toVarArray (device->getAvailableBufferSizes()));
         // Channel names of the chosen input, also while it isn't open.
         if (inputOpen)
@@ -521,6 +545,21 @@ juce::String AudioEngine::reconfigure (juce::AudioDeviceManager::AudioDeviceSetu
     // Bluetooth adds ~100 ms or more anyway; small buffers only add dropouts.
     if (isBluetooth (setup.outputDeviceName) || (wantInput && isBluetooth (wantedInput)))
         setup.bufferSize = juce::jmax (setup.bufferSize, bluetoothMinBuffer);
+
+   #if JUCE_LINUX
+    if ((newType.isNotEmpty() ? newType : deviceManager.getCurrentAudioDeviceType()) == "JACK")
+    {
+        auto* device = deviceManager.getCurrentAudioDevice();
+        requestPipeWireBuffer (setup.bufferSize, device != nullptr ? device->getCurrentSampleRate() : setup.sampleRate);
+        // JUCE's JACK device opens its client when it's created: a new size needs a new one.
+        if (newType.isEmpty() && device != nullptr && setup.bufferSize > 0 && setup.bufferSize != device->getCurrentBufferSizeSamples())
+        {
+            fadeOutForRestart();
+            deviceManager.closeAudioDevice();
+            return deviceManager.setAudioDeviceSetup (setup, true);
+        }
+    }
+   #endif
 
     if (newType.isNotEmpty())
         return openWithDriver (newType, setup);
