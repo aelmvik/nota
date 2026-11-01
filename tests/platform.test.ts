@@ -70,6 +70,12 @@ describe('platform paths', () => {
     expect(bulkDataDir('D:\\test', 'win32', { LOCALAPPDATA: 'C:\\x', NOTA_USER_DATA: 'D:\\test' })).toBe('D:\\test')
   })
 
+  it('keeps the Python environment in ~/.local/share on Linux, beside the settings in ~/.config', () => {
+    expect(bulkDataDir('/home/me/.config/Nøta', 'linux', {}, '/home/me')).toBe('/home/me/.local/share/Nøta')
+    expect(bulkDataDir('/home/me/.config/Nøta', 'linux', { XDG_DATA_HOME: '/data' }, '/home/me')).toBe('/data/Nøta')
+    expect(bulkDataDir('/tmp/test', 'linux', { NOTA_USER_DATA: '/tmp/test' }, '/home/me')).toBe('/tmp/test')
+  })
+
   it('puts PipeWire’s JACK library first for the engine on Debian-style Linux', () => {
     const dir = '/usr/lib/x86_64-linux-gnu/pipewire-0.3/jack'
     const has = (p: string) => p === `${dir}/libjack.so.0`

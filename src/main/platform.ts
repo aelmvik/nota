@@ -88,10 +88,15 @@ export function findOnDisk(path: string): string {
 /**
  * Where large, re-downloadable data lives (the Python environment, model
  * weights): beside the settings, except on Windows, where the settings folder
- * roams with the user's profile and a gigabyte of PyTorch belongs in the local one.
+ * roams with the user's profile and a gigabyte of PyTorch belongs in the local
+ * one, and on Linux, where settings go in ~/.config and data in ~/.local/share.
+ * A copy with its own NOTA_USER_DATA keeps everything there.
  */
-export function bulkDataDir(userData: string, platform: Platform = process.platform, env: NodeJS.ProcessEnv = process.env): string {
-  return platform === 'win32' && env.LOCALAPPDATA && !env.NOTA_USER_DATA ? win32.join(env.LOCALAPPDATA, win32.basename(userData)) : userData
+export function bulkDataDir(userData: string, platform: Platform = process.platform, env: NodeJS.ProcessEnv = process.env, home = homedir()): string {
+  if (env.NOTA_USER_DATA) return userData
+  if (platform === 'win32' && env.LOCALAPPDATA) return win32.join(env.LOCALAPPDATA, win32.basename(userData))
+  if (platform === 'linux') return posix.join(env.XDG_DATA_HOME || posix.join(home, '.local', 'share'), posix.basename(userData))
+  return userData
 }
 
 /** Where deleted files go, as messages name it. */

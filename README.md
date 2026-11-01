@@ -112,7 +112,7 @@ npm run package             # Mac: dist/mac-arm64/Nøta.app (ad-hoc signed). Win
 
 On Windows on ARM the same steps build the x64 app. Pushes to `main` build the Windows installer on GitHub Actions (`.github/workflows/windows.yml`), on a clean Windows machine that also checks the engine doesn't need the Visual C++ runtime, and the Linux packages on Ubuntu 22.04 (`.github/workflows/linux.yml`).
 
-Where things go: the audio environment and models in `~/Library/Application Support/Nøta` on a Mac, in `%LOCALAPPDATA%\Nøta` on Windows (settings in `%APPDATA%\Nøta`). Projects are portable between the two: relative paths are stored with `/`, and Audio Unit effects show as "Mac only" on Windows and keep their settings.
+Where things go: the audio environment and models in `~/Library/Application Support/Nøta` on a Mac, in `%LOCALAPPDATA%\Nøta` on Windows (settings in `%APPDATA%\Nøta`), in `~/.local/share/Nøta` on Linux (settings in `~/.config/Nøta`). Projects are portable between the two: relative paths are stored with `/`, and Audio Unit effects show as "Mac only" on Windows and keep their settings.
 
 `npm test` runs the tests (vitest) and `npm run typecheck` checks the types. `tests/engineRender.test.ts` checks song playback sample by sample: `NotaEngine --render <script.json> <out.wav>` runs the engine's song path from a script instead of an audio device and the test compares the output with the source frames (bit-exact playback, loop wraps, mode switches, seeks, resampling, slow-down, key change, the metronome and the count-in; skipped if the engine isn't built). The service tests run real audio through import, separation, validation, saving, reopening and project folders, with only the separation model replaced by a fake.
 
