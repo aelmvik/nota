@@ -634,7 +634,7 @@ function registerIpc() {
   handle('effects:remove', (slotId: string) => projects.undoable('Remove effect', () => audio.removeEffect(slotId)))
   handle('effects:move', (slotId: string, to: number) => projects.undoable('Move effect', () => audio.moveEffect(slotId, to)))
   handle('effects:setBypass', (slotId: string, bypassed: boolean) => projects.undoable(bypassed ? 'Bypass effect' : 'Turn effect on', () => audio.setBypass(slotId, bypassed)))
-  handle('effects:openEditor', (slotId: string) => audio.openEditor(slotId))
+  handle('effects:toggleEditor', (slotId: string) => audio.toggleEditor(slotId))
   handle('effects:slotErrors', () => audio.getSlotErrors())
 }
 

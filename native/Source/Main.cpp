@@ -498,6 +498,10 @@ private:
         {
             respond (id, true, e.openEditor (msg["slotId"].toString()));
         }
+        else if (cmd == "toggleEditor")
+        {
+            respond (id, true, e.toggleEditor (msg["slotId"].toString()));
+        }
         else if (cmd == "getChainState")
         {
             respond (id, e.getChainState());

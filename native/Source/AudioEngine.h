@@ -65,6 +65,9 @@ public:
     void setOutputIncludesBass (bool include) { outputIncludesBass.store (include); }
     bool setBypassed (const juce::String& slotId, bool bypassed);
     juce::String openEditor (const juce::String& slotId);
+    /** Closes the effect's window if it's open, otherwise opens it (a click in the Mixer). */
+    juce::String toggleEditor (const juce::String& slotId);
+    void closeEditor (const juce::String& slotId);
     void closeAllEditors();
     /** Plugin windows' title bars follow Nøta's theme and background colour (0xRRGGBB, or -1)
         on Windows; elsewhere the system draws them. */

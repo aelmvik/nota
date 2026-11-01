@@ -304,8 +304,9 @@ export class AudioSession extends EventEmitter {
     void this.refreshDevice()
   }
 
-  async openEditor(slotId: string) {
-    await this.engine.call('openEditor', { slotId })
+  /** Open the effect's window, or close it if it's open. */
+  async toggleEditor(slotId: string) {
+    await this.engine.call('toggleEditor', { slotId })
   }
 
   /** Pull current plugin states from the engine so they are saved with the project. */
