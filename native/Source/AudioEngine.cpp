@@ -749,6 +749,11 @@ int AudioEngine::snapshotBlocksAhead()
     // JACK runs the callback in the cycle whose output its latency is measured from.
     if (deviceManager.getCurrentAudioDeviceType() == "JACK")
         return 0;
+   #elif JUCE_WINDOWS
+    // ASIO drivers count the buffer the callback fills in their output latency,
+    // and JUCE adds it to WASAPI's: getOutputLatencySeconds() already reaches
+    // the end of this block. Two blocks more put the playhead two buffers late.
+    return 0;
    #endif
     return 2;
 }
