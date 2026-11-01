@@ -1,7 +1,8 @@
 // Renders build/icon.html (the stacked nø/ta wordmark in Archivo) to
 // build/icon.png (1024²) with Electron's own renderer, then builds
 // build/icon.icns with sips + iconutil.
-// On Windows it builds build/icon.ico from that build/icon.png instead.
+// On Windows it builds build/icon.ico from that build/icon.png instead, and on
+// Linux build/icons/<size>x<size>.png (the sizes desktop icon themes look for).
 // Run: npx electron scripts/render-icon.cjs
 const { app, BrowserWindow, nativeImage } = require('electron')
 const { writeFileSync, mkdirSync, rmSync } = require('node:fs')
@@ -61,6 +62,16 @@ app.whenReady().then(async () => {
   if (process.platform === 'win32') {
     writeFileSync(join(buildDir, 'icon.ico'), windowsIcon(nativeImage.createFromPath(join(buildDir, 'icon.png'))))
     console.log('Wrote build/icon.ico')
+    app.quit()
+    return
+  }
+  if (process.platform === 'linux') {
+    const image = nativeImage.createFromPath(join(buildDir, 'icon.png'))
+    const dir = join(buildDir, 'icons')
+    mkdirSync(dir, { recursive: true })
+    for (const size of [16, 24, 32, 48, 64, 128, 256, 512])
+      writeFileSync(join(dir, `${size}x${size}.png`), image.resize({ width: size, height: size, quality: 'best' }).toPNG())
+    console.log('Wrote build/icons')
     app.quit()
     return
   }

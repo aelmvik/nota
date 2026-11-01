@@ -1,0 +1,63 @@
+# Builds the Linux AppImage and .deb (x64) on Ubuntu 22.04: the engine and FFmpeg
+# need the glibc they're built against or newer, so an older base runs on more
+# systems. The packages are kept as a download on the run.
+name: Linux
+
+on:
+  push:
+    branches: [main, linux]
+  workflow_dispatch:
+
+jobs:
+  packages:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # The engine (ALSA, JACK, X11, FreeType) and FFmpeg's assembly (NASM).
+      - name: Install build packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential cmake pkg-config nasm \
+            libasound2-dev libjack-jackd2-dev libx11-dev libxext-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxcomposite-dev libfreetype-dev libfontconfig1-dev
+
+      # The tools only change when build-tools.mjs does; building FFmpeg takes a while.
+      - uses: actions/cache@v4
+        with:
+          path: native/build/tools
+          key: tools-linux-x64-${{ hashFiles('scripts/build-tools.mjs') }}
+
+      - run: npm ci
+
+      - run: npm run tools:build
+
+      - run: npm run engine:build
+
+      - name: Check the engine and FFmpeg run on this glibc
+        run: |
+          for f in native/build/NotaEngine_artefacts/Release/NotaEngine native/build/tools/ffmpeg; do
+            echo "$f needs $(objdump -T "$f" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)"
+          done
+          native/build/tools/ffmpeg -hide_banner -version | head -1
+
+      - run: npm run package
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nota-linux-packages
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+          retention-days: 14
+          compression-level: 0
+
+      - run: npm run typecheck
+
+      - run: npm test

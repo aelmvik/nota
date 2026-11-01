@@ -24,6 +24,7 @@
   ],
   "private": true,
   "main": "out/main/index.js",
+  "desktopName": "nota.desktop",
   "type": "commonjs",
   "engines": {
     "node": ">=20"
@@ -69,6 +70,9 @@
       "package.json"
     ],
     "asar": true,
+    "toolsets": {
+      "appimage": "1.0.3"
+    },
     "extraResources": [
       {
         "from": "native/build/tools",
@@ -195,6 +199,66 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Nøta",
       "deleteAppDataOnUninstall": false
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icons",
+      "category": "AudioVideo;Audio;Music",
+      "executableName": "nota",
+      "syncDesktopName": true,
+      "synopsis": "Bass practice: separate the bass from any song and play along",
+      "description": "Separate the bass from any song, loop and slow down, and play along",
+      "maintainer": "Anton Elmvik",
+      "desktop": {
+        "entry": {
+          "Name": "Nøta",
+          "Keywords": "bass;practice;stems;loop;"
+        }
+      },
+      "extraResources": [
+        {
+          "from": "native/build/NotaEngine_artefacts/Release/NotaEngine",
+          "to": "NotaEngine"
+        },
+        {
+          "from": "native/build/tools",
+          "to": "tools",
+          "filter": [
+            "ffmpeg",
+            "ffprobe",
+            "uv"
+          ]
+        }
+      ]
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0",
+        "libasound2",
+        "libfreetype6",
+        "libfontconfig1"
+      ]
     }
   }
 }

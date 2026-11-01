@@ -2,7 +2,7 @@
 // engine and the bundled tools exist, packages with electron-builder and signs ad hoc (Apple
 // Silicon refuses to run unsigned code). For distribution to other Macs,
 // sign with a Developer ID and notarize instead. On Windows it builds an
-// installer instead (see below).
+// installer instead, and on Linux an AppImage and a .deb (see below).
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -26,6 +26,18 @@ if (process.platform === 'win32') {
   npx(['electron-builder', '--win', '--x64', '--publish', 'never', `-c.directories.output=${out}`])
   const installer = readdirSync(join(root, out)).find((f) => f.endsWith('.exe') && f.includes('Setup'))
   console.log(`\nBuilt ${join(root, out, installer)}`)
+  process.exit(0)
+}
+
+// Linux: dist/Nøta-<version>.AppImage and dist/nota_<version>_amd64.deb, for x64.
+// They run on systems with the glibc they were built against or newer.
+if (process.platform === 'linux') {
+  if (!existsSync(join(root, 'native/build/NotaEngine_artefacts/Release/NotaEngine'))) run('node', ['scripts/build-engine.mjs'])
+  run('node', ['scripts/build-tools.mjs'])
+  if (!existsSync(join(root, 'build/icons/512x512.png'))) run('npx', ['electron', 'scripts/render-icon.cjs'])
+  run('npx', ['electron-vite', 'build'])
+  run('npx', ['electron-builder', '--linux', '--x64', '--publish', 'never', `-c.directories.output=${out}`])
+  for (const f of readdirSync(join(root, out)).filter((f) => f.endsWith('.AppImage') || f.endsWith('.deb'))) console.log(`Built ${join(root, out, f)}`)
   process.exit(0)
 }
 

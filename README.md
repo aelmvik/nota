@@ -107,10 +107,10 @@ npm run engine:build        # the audio engine (JUCE 8.0.4, cloned into native/t
 npm run tools:build         # an audio-only FFmpeg with LAME, built from source, and uv, into native/build/tools
 npm run setup:separation    # optional for development: separation/.venv with Python 3.13, PyTorch and Demucs (~1 GB)
 npm run dev                 # development build with hot reload
-npm run package             # Mac: dist/mac-arm64/Nøta.app (ad-hoc signed). Windows: dist/Nøta Setup <version>.exe
+npm run package             # Mac: dist/mac-arm64/Nøta.app (ad-hoc signed). Windows: dist/Nøta Setup <version>.exe. Linux: dist/Nøta-<version>.AppImage and dist/nota_<version>_amd64.deb
 ```
 
-On Windows on ARM the same steps build the x64 app. Pushes to `main` build the Windows installer on GitHub Actions (`.github/workflows/windows.yml`), on a clean Windows machine that also checks the engine doesn't need the Visual C++ runtime.
+On Windows on ARM the same steps build the x64 app. Pushes to `main` build the Windows installer on GitHub Actions (`.github/workflows/windows.yml`), on a clean Windows machine that also checks the engine doesn't need the Visual C++ runtime, and the Linux packages on Ubuntu 22.04 (`.github/workflows/linux.yml`).
 
 Where things go: the audio environment and models in `~/Library/Application Support/Nøta` on a Mac, in `%LOCALAPPDATA%\Nøta` on Windows (settings in `%APPDATA%\Nøta`). Projects are portable between the two: relative paths are stored with `/`, and Audio Unit effects show as "Mac only" on Windows and keep their settings.
 
@@ -126,10 +126,9 @@ Linux isn't supported yet, but a port is under way, and the platform-specific pa
 - **Tools:** `npm run tools:build` builds the same audio-only FFmpeg and LAME with GCC (it needs `nasm` on x64) and fetches uv's Linux release. With them the service tests run too.
 - **Window:** on GNOME (Wayland, which Electron uses by itself), the brand bar is the title bar with GNOME's own window buttons over its right end, the hidden menu's shortcuts work, and Alt is free for the app's gestures (GNOME moves windows with Super).
 - **Python:** PyPI's Linux PyTorch comes with NVIDIA's CUDA libraries (about 2.5 GB), so on Linux uv installs PyTorch's CPU build (`--torch-backend cpu`, about 200 MB), in `npm run setup:separation` and in the app. Separation on a laptop CPU takes about 1.2× the song's length (four to five minutes for a song). Both `separate.py` and `analyze.py` use an NVIDIA GPU when PyTorch has CUDA, but the app doesn't install a CUDA build yet.
+- **Packaging:** `npm run package` builds an AppImage and a `.deb` for x64. The AppImage uses AppImage's static runtime (`toolsets.appimage` in package.json), so it needs FUSE 3, which desktops have, and not the old libfuse2. The `.deb` installs to `/opt/Nøta` with a desktop entry and icons (`build/icons`, made by `npm run icon`), and `desktopName` lets GNOME match the window to it. The engine and FFmpeg need the glibc they were built against (2.38 on Debian 13), so release packages come from the Ubuntu 22.04 job (glibc 2.35).
 
-Still to do:
-
-- **Packaging:** an AppImage (and maybe a `.deb`) target for electron-builder, with its own `extraResources`. The engine and FFmpeg need the glibc they were built against (2.38 when built on Debian 13), so release builds belong on an older distribution.
+Still to do: CUDA PyTorch for NVIDIA GPUs, arm64 packages, and testing on more distributions and with real audio interfaces under JACK.
 
 The window and menus already work off the Mac (the brand bar is the title bar, the menu is hidden but keeps its shortcuts, and Alt takes ⌘'s place in gestures; see `src/renderer/platform.ts`).
 
