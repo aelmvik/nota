@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events'
 import { existsSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import type { PluginCatalog, PluginInfo, ScanProgress } from '../shared/types'
-import { defaultVst3Dirs } from './platform'
+import { defaultVst3Dirs, looseVst3Plugins } from './platform'
 import { writeFileAtomic } from './projectStore'
 
 // Discovers VST3 (and on macOS, Audio Unit) effects. Every plugin is probed
@@ -143,6 +143,14 @@ export class PluginScanner extends EventEmitter {
         if (entry.error) failed.push({ format, fileOrIdentifier, reason: entry.error })
         plugins.push(...entry.plugins.filter((p) => !p.isInstrument))
       }
+      if (formats.includes('VST3'))
+        for (const dir of directories)
+          for (const loose of looseVst3Plugins(dir))
+            failed.push({
+              format: 'VST3',
+              fileOrIdentifier: loose.file,
+              reason: `Installed without its folder: put Contents in a folder named “${loose.name}.vst3” in ${dir}`
+            })
       plugins.sort((a, b) => a.name.localeCompare(b.name) || a.format.localeCompare(b.format))
 
       this.cache = nextCache

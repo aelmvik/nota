@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { bulkDataDir, defaultVst3Dirs, engineEnv, engineExecutable, torchBackendArgs, exe, findOnDisk, portableRelative, replaceFile, venvPython } from '../src/main/platform'
+import { bulkDataDir, defaultVst3Dirs, engineEnv, engineExecutable, looseVst3Plugins, torchBackendArgs, exe, findOnDisk, portableRelative, replaceFile, venvPython } from '../src/main/platform'
 
 // macOS answers must stay exactly what the app has always used; the others are for a port.
 describe('platform paths', () => {
@@ -90,6 +90,16 @@ describe('platform paths', () => {
     expect(torchBackendArgs('linux')).toEqual(['--torch-backend', 'cpu'])
     expect(torchBackendArgs('darwin')).toEqual([])
     expect(torchBackendArgs('win32')).toEqual([])
+  })
+
+  it('notices a VST3 plugin copied in without its .vst3 folder', () => {
+    const tree: Record<string, string[]> = {
+      '/home/me/.vst3/Contents': ['Resources', 'x86_64-linux'],
+      '/home/me/.vst3/Contents/x86_64-linux': ['TDR Nova.so', 'TDR Nova.so.asc']
+    }
+    const list = (p: string) => tree[p] ?? []
+    expect(looseVst3Plugins('/home/me/.vst3', list)).toEqual([{ name: 'TDR Nova', file: '/home/me/.vst3/Contents/x86_64-linux/TDR Nova.so' }])
+    expect(looseVst3Plugins('/usr/lib/vst3', list)).toEqual([])
   })
 
   it('stores relative paths with forward slashes on every platform', () => {

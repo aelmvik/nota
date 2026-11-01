@@ -118,6 +118,21 @@ export function torchBackendArgs(platform: Platform = process.platform): string[
   return platform === 'linux' ? ['--torch-backend', 'cpu'] : []
 }
 
+/**
+ * VST3 plugins copied in without their bundle folder: `Contents/` straight in a
+ * plugin folder (unzipping "TDR Nova.vst3" and copying what's inside, say).
+ * Hosts only look for *.vst3 folders, so these are never found. Returns the
+ * plugin names and where their files are, for the scan to say what to do.
+ */
+export function looseVst3Plugins(dir: string, list: (path: string) => string[] = (p) => { try { return readdirSync(p) } catch { return [] } }) {
+  const contents = posix.join(dir.replace(/\\/g, '/'), 'Contents')
+  const found: { name: string; file: string }[] = []
+  for (const arch of list(contents).filter((a) => /-(linux|win)$|^MacOS$/.test(a)))
+    for (const file of list(posix.join(contents, arch)).filter((f) => /\.(so|vst3)$/.test(f) || arch === 'MacOS'))
+      found.push({ name: file.replace(/\.(so|vst3)$/, ''), file: posix.join(contents, arch, file) })
+  return found
+}
+
 /** The standard VST3 plugin folders. */
 export function defaultVst3Dirs(platform: Platform = process.platform, home = homedir()): string[] {
   if (platform === 'darwin') return ['/Library/Audio/Plug-Ins/VST3', `${home}/Library/Audio/Plug-Ins/VST3`]
