@@ -128,9 +128,67 @@ namespace
         std::unique_ptr<juce::AudioIODevice> device (type->createDevice ({}, name));
         return device != nullptr ? device->getInputChannelNames().size() : 0;
     }
+#elif JUCE_LINUX
+    // Linux: ALSA and JACK don't say what a device is, so go by name. The system
+    // default, the sound server and the laptop's own sound card (HDA Intel and
+    // the like) may be a built-in mic and speakers; a USB or other interface isn't.
+    bool isSystemDevice (const juce::String& name)
+    {
+        return name.containsIgnoreCase ("default") || name.containsIgnoreCase ("pipewire") || name.containsIgnoreCase ("pulse")
+            || name.startsWithIgnoreCase ("HDA ") || name.containsIgnoreCase ("microphone") || name == "system";
+    }
+
+    bool isBluetooth (const juce::String& name) { return name.containsIgnoreCase ("bluez") || name.containsIgnoreCase ("bluetooth"); }
+
+    /** An interface's input stays open; the system default or built-in sound only while something listens. */
+    bool keepsInputOpen (const juce::String& name) { return name.isNotEmpty() && ! isSystemDevice (name) && ! isBluetooth (name); }
+
+    /** Possibly a built-in mic into speakers (HDMI goes to a screen or a receiver): the app asks first. */
+    bool feedbackRisk (const juce::String& input, const juce::String& output)
+    {
+        return isSystemDevice (input) && isSystemDevice (output) && ! output.containsIgnoreCase ("HDMI");
+    }
+
+    int inputChannelCount (const juce::String&) { return 0; }
+
+    /**
+     * ALSA lists each sound card several times: surround layouts, dmix and dsnoop,
+     * and the raw hardware device ("card, device; description"). Keep one entry per
+     * card and device, the one that converts formats, and always the one in use.
+     * JACK is the low-latency route, so the raw hardware devices aren't needed.
+     */
+    juce::StringArray listedDevices (const juce::String& typeName, const juce::StringArray& names, const juce::String& current)
+    {
+        if (typeName != "ALSA")
+            return names;
+        const auto card = [] (const juce::String& n) { return n.upToFirstOccurrenceOf (";", false, false); };
+        const auto rank = [] (const juce::String& n) {
+            if (n.contains ("Surround output") || n.contains ("Direct sample snooping") || n.contains ("Direct sample mixing"))
+                return 2;
+            return n.contains ("Direct hardware") ? 1 : 0;
+        };
+        // The best entry for each card and device, in the order ALSA lists them.
+        juce::StringArray best;
+        for (auto& n : names)
+        {
+            if (! n.contains (";"))
+            {
+                best.add (n);
+                continue;
+            }
+            int i = 0;
+            while (i < best.size() && card (best[i]) != card (n))
+                ++i;
+            if (i == best.size())
+                best.add (n);
+            else if (rank (n) < rank (best[i]))
+                best.set (i, n);
+        }
+        if (current.isNotEmpty() && names.contains (current) && ! best.contains (current))
+            best.add (current);
+        return best;
+    }
 #else
-    // Linux (not supported yet): no Bluetooth detection, every device but a
-    // microphone keeps its input open, and channel counts come from the open device.
     bool isBluetooth (const juce::String&) { return false; }
     bool keepsInputOpen (const juce::String& name) { return name.isNotEmpty() && ! name.containsIgnoreCase ("microphone"); }
     int inputChannelCount (const juce::String&) { return 0; }
@@ -263,8 +321,14 @@ juce::var AudioEngine::getDeviceState()
     if (auto* type = deviceManager.getCurrentDeviceTypeObject())
     {
         type->scanForDevices();
+       #if JUCE_LINUX
+        const auto typeName = type->getTypeName();
+        state->setProperty ("inputDevices", toVarArray (listedDevices (typeName, type->getDeviceNames (true), wantedInput)));
+        state->setProperty ("outputDevices", toVarArray (listedDevices (typeName, type->getDeviceNames (false), setup.outputDeviceName)));
+       #else
         state->setProperty ("inputDevices", toVarArray (type->getDeviceNames (true)));
         state->setProperty ("outputDevices", toVarArray (type->getDeviceNames (false)));
+       #endif
         // ASIO: one driver is both the input and the output.
         state->setProperty ("separateInputs", type->hasSeparateInputsAndOutputs());
     }
@@ -275,7 +339,7 @@ juce::var AudioEngine::getDeviceState()
     state->setProperty ("inputOpen", inputOpen);
     state->setProperty ("inputBluetooth", isBluetooth (wantedInput));
     state->setProperty ("outputBluetooth", isBluetooth (setup.outputDeviceName));
-   #if JUCE_WINDOWS
+   #if JUCE_WINDOWS || JUCE_LINUX
     state->setProperty ("feedbackRisk", feedbackRisk (wantedInput, setup.outputDeviceName));
    #endif
 

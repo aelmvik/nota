@@ -8,7 +8,7 @@ import { toggleSidePane } from './Settings'
 import { openAudioSettings } from './AudioSetup'
 import { toggleKeys } from './Shortcuts'
 import { Button, Icon, InlineEdit, Popover, Wordmark, type IconName } from './ui'
-import { shortcut } from '../platform'
+import { deviceLabel, shortcut } from '../platform'
 import { useUpdate } from '../updates'
 
 function SaveStatus() {
@@ -280,7 +280,7 @@ export function StatusBar() {
       {d ? (
         <>
           <button type="button" className="statusbar-audio" title="Audio interface and settings" onClick={openAudioSettings}>
-            <span>{d.outputDevice}</span>
+            <span>{d.outputDevice && deviceLabel(d.outputDevice)}</span>
             <span className="statusbar-sep" />
             <span>
               {d.bufferSize} @ {d.sampleRate ? (d.sampleRate / 1000).toFixed(d.sampleRate % 1000 ? 1 : 0) : '—'} kHz

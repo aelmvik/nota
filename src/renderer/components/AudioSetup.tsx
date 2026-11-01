@@ -3,6 +3,7 @@ import type { DeviceRequest } from '../../shared/api'
 import type { EngineDeviceState } from '../../shared/types'
 import { attempt, setState, useStore } from '../state/store'
 import { Button, Icon, Select } from './ui'
+import { deviceLabel } from '../platform'
 
 // The audio interface and how it runs: driver, devices, sample rate and buffer.
 // Set up once, so it lives in Settings (like the Audio preferences of Logic or
@@ -20,7 +21,9 @@ const DRIVER_LABELS: Record<string, string> = {
 const DRIVER_HELP: Record<string, string> = {
   'Windows Audio': 'Works with any device, shared with other apps. Fine for playing along; too slow to hear your bass live.',
   'Windows Audio (Exclusive Mode)': 'Takes the device for Nøta alone: lower latency, other apps go quiet.',
-  ASIO: 'Your interface’s own driver: the lowest latency. Use this to hear your bass live.'
+  ASIO: 'Your interface’s own driver: the lowest latency. Use this to hear your bass live.',
+  ALSA: 'Works with any device, shared with other apps through the sound server. Fine for playing along; too slow to hear your bass live.',
+  JACK: 'The low-latency route (PipeWire’s or JACK’s own server). Use this to hear your bass live.'
 }
 
 export const formatRate = (r: number) => `${(r / 1000).toFixed(r % 1000 ? 1 : 0)} kHz`
@@ -43,7 +46,7 @@ export function useSetDevice() {
 
 /** One line for the device: "M-Audio M-Track Eight · ASIO · 256 @ 44.1 kHz". */
 export function deviceSummary(d: EngineDeviceState) {
-  const name = d.outputDevice
+  const name = d.outputDevice && deviceLabel(d.outputDevice)
   const driver = (d.availableDeviceTypes?.length ?? 0) > 1 && d.deviceType ? DRIVER_LABELS[d.deviceType] ?? d.deviceType : null
   const rate = d.bufferSize && d.sampleRate ? `${d.bufferSize} @ ${formatRate(d.sampleRate)}` : null
   return { name: name ?? 'No output', detail: [driver, rate].filter(Boolean).join(' · ') }
@@ -87,7 +90,7 @@ export function AudioSection() {
   const oneDevice = d.separateInputs === false
   const sr = d.sampleRate ?? 0
   const bufferMs = (b: number) => (sr ? ` (${((1000 * b) / sr).toFixed(1)} ms)` : '')
-  const devices = (names: string[] | undefined) => (names ?? []).map((n) => ({ value: n, label: n }))
+  const devices = (names: string[] | undefined) => (names ?? []).map((n) => ({ value: n, label: deviceLabel(n) }))
   const channels = inputChannelChoice(d)
   const channelField = channels.options.length > 1 && (
     <Field label="Input channel" help="The input your bass is plugged into: one for a mono bass, a pair for a stereo rig. Also in the Mixer.">

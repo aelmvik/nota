@@ -76,6 +76,12 @@ if(WIN32 AND NOTA_ASIO_SDK)
     target_include_directories(NotaEngine PRIVATE "${NOTA_ASIO_SDK}/common")
 endif()
 
+# Linux: JACK beside ALSA, the low-latency route (PipeWire's JACK on desktops).
+# JUCE loads libjack at runtime, so the engine still starts without it.
+if(UNIX AND NOT APPLE)
+    target_compile_definitions(NotaEngine PRIVATE JUCE_JACK=1)
+endif()
+
 # MSVC reads sources in the system code page unless told otherwise; ours are UTF-8.
 if(MSVC)
     target_compile_options(NotaEngine PRIVATE /utf-8)

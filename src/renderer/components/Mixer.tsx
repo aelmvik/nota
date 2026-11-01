@@ -6,6 +6,7 @@ import { Chain } from './EffectsPanel'
 import { closeSidePane } from './Settings'
 import { Button, Icon, Select, Slider, Toggle, formatDb } from './ui'
 import { deviceSummary, inputChannelChoice, openAudioSettings, useSetDevice } from './AudioSetup'
+import { deviceLabel } from '../platform'
 
 // ---- Level meter: updated straight from engine meter events, no React renders ----
 
@@ -294,7 +295,7 @@ export function MixerPanel() {
   const bluetoothNote = d.inputBluetooth
     ? {
         short: 'Bluetooth mic: call quality while open',
-        long: `While Monitor or the tuner is on, using the ${d.inputDevice} microphone switches it to headset mode: low-quality sound and more dropouts, for the song too. Pick another microphone (your interface, or the computer's) to keep full quality.`
+        long: `While Monitor or the tuner is on, using the ${deviceLabel(d.inputDevice ?? '')} microphone switches it to headset mode: low-quality sound and more dropouts, for the song too. Pick another microphone (your interface, or the computer's) to keep full quality.`
       }
     : d.outputBluetooth
       ? {

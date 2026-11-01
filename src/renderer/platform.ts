@@ -24,3 +24,16 @@ export function shortcut(key: string, shift = false): string {
 
 /** "Show in Finder", or what the file manager is called here. */
 export const revealLabel = isMac ? 'Show in Finder' : window.nota.platform === 'win32' ? 'Show in File Explorer' : 'Show in Folder'
+
+/**
+ * A device as it reads here. ALSA's names are "card, device; description", and
+ * the system default reads "Default ALSA Output (currently PipeWire Media Server)"
+ * for the input too: show "HDA Intel PCH, Analog" (the card and device) and "System default
+ * (PipeWire Media Server)". The engine's name is still what's sent back.
+ */
+export function deviceLabel(name: string): string {
+  if (window.nota.platform !== 'linux') return name
+  const def = /^Default ALSA (?:Output|Input)(?: \(currently (.+)\))?$/.exec(name)
+  if (def) return def[1] ? `System default (${def[1]})` : 'System default'
+  return name.includes(';') ? name.slice(0, name.indexOf(';')) : name
+}
