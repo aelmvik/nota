@@ -116,7 +116,7 @@ export function Chain({ chain, effects }: { chain: EffectChain; effects: EffectS
             >
               <Icon name="power" size={13} />
             </button>
-            <button type="button" className="fx-body" title={err ? err : 'Open plugin window'} disabled={!!err} onClick={() => void attempt(() => fx.openEditor(e.slotId), e.name)}>
+            <button type="button" className="fx-body" title={err ? err : 'Open or close the plugin window'} disabled={!!err} onClick={() => void attempt(() => fx.toggleEditor(e.slotId), e.name)}>
               <span className="fx-name">{e.name}</span>
               <span className="fx-meta">{err ? (e.format === 'AudioUnit' && !isMac ? 'Audio Unit · Mac only' : 'Could not load') : `${e.manufacturer} · ${e.format === 'AudioUnit' ? 'AU' : e.format}`}</span>
             </button>

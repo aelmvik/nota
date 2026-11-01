@@ -356,7 +356,7 @@ export async function createFakeNota(base: string): Promise<NotaApi> {
           return { ...p, effects: fx }
         }),
       setBypass: (slotId, bypassed) => mutate(bypassed ? 'Bypass effect' : 'Turn effect on', (p) => ({ ...p, effects: p.effects.map((e) => (e.slotId === slotId ? { ...e, bypassed } : e)) })),
-      openEditor: notInDemo,
+      toggleEditor: notInDemo,
       slotErrors: () => Promise.resolve({}),
       onSlotErrors: () => () => {}
     },

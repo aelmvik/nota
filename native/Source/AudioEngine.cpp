@@ -335,17 +335,10 @@ public:
 
     void closeButtonPressed() override
     {
+        // Not from inside this window's own callback: it deletes the window.
         auto* engine = &owner;
         auto id = slotId;
-        juce::MessageManager::callAsync ([engine, id]
-        {
-            auto& list = engine->editors;
-            list.erase (std::remove_if (list.begin(), list.end(),
-                                        [&] (auto& w) { return w->slotId == id; }),
-                        list.end());
-            if (engine->onEditorClosed)
-                engine->onEditorClosed (id);
-        });
+        juce::MessageManager::callAsync ([engine, id] { engine->closeEditor (id); });
     }
 
     AudioEngine& owner;
@@ -1275,6 +1268,28 @@ bool AudioEngine::setBypassed (const juce::String& slotId, bool bypassed)
         return true;
     }
     return false;
+}
+
+void AudioEngine::closeEditor (const juce::String& slotId)
+{
+    const auto before = editors.size();
+    editors.erase (std::remove_if (editors.begin(), editors.end(), [&] (auto& w) { return w->slotId == slotId; }),
+                   editors.end());
+    if (editors.size() != before && onEditorClosed)
+        onEditorClosed (slotId);
+}
+
+juce::String AudioEngine::toggleEditor (const juce::String& slotId)
+{
+    for (auto& w : editors)
+    {
+        if (w->slotId == slotId)
+        {
+            closeEditor (slotId);
+            return {};
+        }
+    }
+    return openEditor (slotId);
 }
 
 juce::String AudioEngine::openEditor (const juce::String& slotId)

@@ -94,7 +94,7 @@ const api: NotaApi = {
     remove: (slotId) => invoke('effects:remove', slotId),
     move: (slotId, to) => invoke('effects:move', slotId, to),
     setBypass: (slotId, bypassed) => invoke('effects:setBypass', slotId, bypassed),
-    openEditor: (slotId) => invoke('effects:openEditor', slotId),
+    toggleEditor: (slotId) => invoke('effects:toggleEditor', slotId),
     slotErrors: () => invoke('effects:slotErrors'),
     onSlotErrors: (cb) => subscribe('effects:slotErrors', cb)
   },
