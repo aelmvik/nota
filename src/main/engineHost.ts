@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import readline from 'node:readline'
 import type { EngineDeviceState, EngineMeters, EngineSnapshot, EngineStatus } from '../shared/types'
-import { engineExecutable } from './platform'
+import { engineEnv, engineExecutable } from './platform'
 
 // Spawns and supervises the native audio engine (native/, JUCE). Requests
 // and responses are JSON lines; the engine also pushes meters (30 Hz), song
@@ -64,7 +64,7 @@ export class EngineHost extends EventEmitter {
     this.stopping = false
     this.setState({ status: 'starting', message: null })
 
-    const child = spawn(this.binaryPath, [], { stdio: ['pipe', 'pipe', 'pipe'] })
+    const child = spawn(this.binaryPath, [], { env: engineEnv(), stdio: ['pipe', 'pipe', 'pipe'] })
     this.child = child
     child.stderr.on('data', () => {}) // plugin chatter; deliberately ignored
     // A write just after the engine died fails with EPIPE before 'exit' arrives;

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { bulkDataDir, defaultVst3Dirs, engineExecutable, exe, findOnDisk, portableRelative, replaceFile, venvPython } from '../src/main/platform'
+import { bulkDataDir, defaultVst3Dirs, engineEnv, engineExecutable, exe, findOnDisk, portableRelative, replaceFile, venvPython } from '../src/main/platform'
 
 // macOS answers must stay exactly what the app has always used; the others are for a port.
 describe('platform paths', () => {
@@ -68,6 +68,16 @@ describe('platform paths', () => {
     expect(bulkDataDir('/Users/me/Library/Application Support/Nøta', 'darwin', {})).toBe('/Users/me/Library/Application Support/Nøta')
     expect(bulkDataDir('C:\\Users\\me\\AppData\\Roaming\\Nøta', 'win32', { LOCALAPPDATA: 'C:\\Users\\me\\AppData\\Local' })).toBe('C:\\Users\\me\\AppData\\Local\\Nøta')
     expect(bulkDataDir('D:\\test', 'win32', { LOCALAPPDATA: 'C:\\x', NOTA_USER_DATA: 'D:\\test' })).toBe('D:\\test')
+  })
+
+  it('puts PipeWire’s JACK library first for the engine on Debian-style Linux', () => {
+    const dir = '/usr/lib/x86_64-linux-gnu/pipewire-0.3/jack'
+    const has = (p: string) => p === `${dir}/libjack.so.0`
+    expect(engineEnv('linux', {}, 'x64', has).LD_LIBRARY_PATH).toBe(dir)
+    expect(engineEnv('linux', { LD_LIBRARY_PATH: '/opt/lib' }, 'x64', has).LD_LIBRARY_PATH).toBe(`${dir}:/opt/lib`)
+    expect(engineEnv('linux', { LD_LIBRARY_PATH: dir }, 'x64', has).LD_LIBRARY_PATH).toBe(dir)
+    expect(engineEnv('linux', {}, 'x64', () => false).LD_LIBRARY_PATH).toBeUndefined()
+    expect(engineEnv('darwin', {}, 'arm64', () => true).LD_LIBRARY_PATH).toBeUndefined()
   })
 
   it('stores relative paths with forward slashes on every platform', () => {

@@ -130,12 +130,14 @@ namespace
     }
 #elif JUCE_LINUX
     // Linux: ALSA and JACK don't say what a device is, so go by name. The system
-    // default, the sound server and the laptop's own sound card (HDA Intel and
-    // the like) may be a built-in mic and speakers; a USB or other interface isn't.
+    // default, the sound server and the computer's own sound card (ALSA's "HDA
+    // Intel", PipeWire's "Built-in Audio" under JACK) may be a built-in mic and
+    // speakers; a USB or other interface isn't.
     bool isSystemDevice (const juce::String& name)
     {
         return name.containsIgnoreCase ("default") || name.containsIgnoreCase ("pipewire") || name.containsIgnoreCase ("pulse")
-            || name.startsWithIgnoreCase ("HDA ") || name.containsIgnoreCase ("microphone") || name == "system";
+            || name.startsWithIgnoreCase ("HDA ") || name.containsIgnoreCase ("built-in") || name.containsIgnoreCase ("microphone")
+            || name == "system";
     }
 
     bool isBluetooth (const juce::String& name) { return name.containsIgnoreCase ("bluez") || name.containsIgnoreCase ("bluetooth"); }
@@ -159,6 +161,15 @@ namespace
      */
     juce::StringArray listedDevices (const juce::String& typeName, const juce::StringArray& names, const juce::String& current)
     {
+        // JACK lists every client, PipeWire's MIDI bridges too: they have no audio.
+        if (typeName == "JACK")
+        {
+            juce::StringArray audio;
+            for (auto& n : names)
+                if (n == current || ! n.containsIgnoreCase ("midi"))
+                    audio.add (n);
+            return audio;
+        }
         if (typeName != "ALSA")
             return names;
         const auto card = [] (const juce::String& n) { return n.upToFirstOccurrenceOf (";", false, false); };

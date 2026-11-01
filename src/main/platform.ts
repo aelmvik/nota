@@ -110,3 +110,24 @@ export function defaultVst3Dirs(platform: Platform = process.platform, home = ho
   if (platform === 'win32') return [win32.join(process.env.CommonProgramFiles ?? 'C:\\Program Files\\Common Files', 'VST3')]
   return ['/usr/lib/vst3', '/usr/local/lib/vst3', `${home}/.vst3`]
 }
+
+/**
+ * The audio engine's environment. Debian and Ubuntu keep PipeWire's JACK
+ * library out of the default path (`pw-jack` adds it), and the JACK library
+ * there needs a running jackd: put PipeWire's first, so JACK works on a
+ * PipeWire desktop. Elsewhere, and without pipewire-jack, nothing changes.
+ */
+export function engineEnv(
+  platform: Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+  arch: string = process.arch,
+  exists: (path: string) => boolean = existsSync
+): NodeJS.ProcessEnv {
+  if (platform !== 'linux') return env
+  const triplet = { x64: 'x86_64-linux-gnu', arm64: 'aarch64-linux-gnu' }[arch]
+  const dir = triplet && posix.join('/usr/lib', triplet, 'pipewire-0.3', 'jack')
+  if (!dir || !exists(posix.join(dir, 'libjack.so.0'))) return env
+  const current = env.LD_LIBRARY_PATH?.split(':').filter(Boolean) ?? []
+  if (current.includes(dir)) return env
+  return { ...env, LD_LIBRARY_PATH: [dir, ...current].join(':') }
+}
