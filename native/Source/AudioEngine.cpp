@@ -168,21 +168,40 @@ namespace
     }
 
     /**
-     * JACK's channel names are its port names, and PipeWire names an interface's
-     * ports after its profile's speaker layout (capture_FL, capture_FR, capture_RL …
-     * on an 8-input interface in "Analog Surround 7.1"), then lists monitor ports
-     * (what its outputs play) as inputs too. Number them as the hardware does, and
-     * leave out the monitors when they come last, so the indexes JUCE connects by
-     * stay the same.
+     * JACK's channel names are its port names. A numbered port (PipeWire's Pro Audio
+     * profile: capture_AUX0 …; JACK's own server: capture_1 …) is in hardware order,
+     * so it reads "Input 1" …. A port named after a speaker comes from a surround
+     * profile, whose order isn't the hardware's (on a USB interface in "Analog
+     * Surround 7.1", hardware input 3 is FC, the fifth port), so it keeps its
+     * speaker name, readably. PipeWire also lists an output's monitor ports as
+     * inputs; they're left out when they come last, so the indexes JUCE connects
+     * by stay the same.
      */
     juce::StringArray jackChannelNames (const juce::StringArray& names, const juce::String& label)
     {
+        static const std::pair<const char*, const char*> speakers[] = {
+            { "FL", "Front left" }, { "FR", "Front right" }, { "FC", "Centre" }, { "LFE", "LFE" },
+            { "RL", "Rear left" }, { "RR", "Rear right" }, { "SL", "Side left" }, { "SR", "Side right" },
+            { "RC", "Rear centre" }, { "MONO", "Mono" } };
         int count = names.size();
         while (count > 0 && names[count - 1].startsWith ("monitor_"))
             --count;
         juce::StringArray out;
         for (int i = 0; i < count; ++i)
-            out.add (names[i].startsWith ("monitor_") ? names[i] : label + " " + juce::String (i + 1));
+        {
+            const auto& n = names[i];
+            const auto suffix = n.fromFirstOccurrenceOf ("_", false, false);
+            juce::String name = n;
+            if (suffix.startsWith ("AUX") && suffix.substring (3).containsOnly ("0123456789"))
+                name = label + " " + juce::String (suffix.substring (3).getIntValue() + 1);
+            else if (suffix.isNotEmpty() && suffix.containsOnly ("0123456789"))
+                name = label + " " + suffix;
+            else
+                for (auto& [position, readable] : speakers)
+                    if (suffix == position)
+                        name = readable;
+            out.add (name);
+        }
         return out;
     }
 
