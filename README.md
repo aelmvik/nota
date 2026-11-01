@@ -124,10 +124,10 @@ Linux isn't supported yet, but a port is under way, and the platform-specific pa
 
 - **Engine:** `npm run engine:build` builds with GCC and passes the playback tests. ALSA and JACK are both offered. ALSA's device list is cut down to one entry per card and device, and names read "System default (PipeWire …)" or "card, device". JACK is the low-latency route: on a PipeWire desktop, install `pipewire-jack`. The app puts PipeWire's JACK library first when it starts the engine (Debian keeps it out of the default path), and the JACK buffer menu sets PipeWire's buffer size (`PIPEWIRE_LATENCY`). Linux doesn't say what a device is, so the system default, the sound server and the computer's own sound card are treated as a built-in mic and speakers: their input only opens while something listens, and Monitor asks first.
 - **Tools:** `npm run tools:build` builds the same audio-only FFmpeg and LAME with GCC (it needs `nasm` on x64) and fetches uv's Linux release. With them the service tests run too.
+- **Python:** PyPI's Linux PyTorch comes with NVIDIA's CUDA libraries (about 2.5 GB), so on Linux uv installs PyTorch's CPU build (`--torch-backend cpu`, about 200 MB), in `npm run setup:separation` and in the app. Separation on a laptop CPU takes about 1.2× the song's length (four to five minutes for a song). Both `separate.py` and `analyze.py` use an NVIDIA GPU when PyTorch has CUDA, but the app doesn't install a CUDA build yet.
 
 Still to do:
 
-- **Python:** PyPI's Linux PyTorch comes with NVIDIA's CUDA libraries (about 2.5 GB). Install the CPU build unless there's an NVIDIA GPU (and add CUDA to `separation/analyze.py`, which only tries Apple's GPU).
 - **Packaging:** an AppImage (and maybe a `.deb`) target for electron-builder, with its own `extraResources`. The engine and FFmpeg need the glibc they were built against (2.38 when built on Debian 13), so release builds belong on an older distribution.
 
 The window and menus already work off the Mac (the brand bar is the title bar, the menu is hidden but keeps its shortcuts, and Alt takes ⌘'s place in gestures; see `src/renderer/platform.ts`).

@@ -10,7 +10,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const win = process.platform === 'win32'
 const tools = join(root, 'native', 'build', 'tools')
 const venv = join(root, 'separation', '.venv')
-// As venvPython() and exe() in src/main/platform.ts (not imported: older Node can't load .ts).
+// As venvPython(), exe() and torchBackendArgs() in src/main/platform.ts (not imported: older Node can't load .ts).
 const python = win ? join(venv, 'Scripts', 'python.exe') : join(venv, 'bin', 'python')
 const uv = join(tools, win ? 'uv.exe' : 'uv')
 const run = (cmd, args, env = process.env) => execFileSync(cmd, args, { stdio: 'inherit', cwd: root, env })
@@ -21,6 +21,8 @@ if (!existsSync(python)) {
   console.log('Creating separation/.venv …')
   run(uv, ['venv', '--python', '3.13', venv], env)
 }
-run(uv, ['pip', 'install', '--python', python, '-r', join(root, 'separation', 'requirements.txt')], env)
+// Linux: PyTorch's CPU build, not PyPI's with ~2.5 GB of CUDA libraries.
+const torchBackend = process.platform === 'linux' ? ['--torch-backend', 'cpu'] : []
+run(uv, ['pip', 'install', ...torchBackend, '--python', python, '-r', join(root, 'separation', 'requirements.txt')], env)
 run(python, [join(root, 'separation', 'separate.py'), '--check'], env)
 console.log('\nSeparation is ready. The Demucs model (~80 MB) downloads on first use.')

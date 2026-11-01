@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { bulkDataDir, defaultVst3Dirs, engineEnv, engineExecutable, exe, findOnDisk, portableRelative, replaceFile, venvPython } from '../src/main/platform'
+import { bulkDataDir, defaultVst3Dirs, engineEnv, engineExecutable, torchBackendArgs, exe, findOnDisk, portableRelative, replaceFile, venvPython } from '../src/main/platform'
 
 // macOS answers must stay exactly what the app has always used; the others are for a port.
 describe('platform paths', () => {
@@ -78,6 +78,12 @@ describe('platform paths', () => {
     expect(engineEnv('linux', { LD_LIBRARY_PATH: dir }, 'x64', has).LD_LIBRARY_PATH).toBe(dir)
     expect(engineEnv('linux', {}, 'x64', () => false).LD_LIBRARY_PATH).toBeUndefined()
     expect(engineEnv('darwin', {}, 'arm64', () => true).LD_LIBRARY_PATH).toBeUndefined()
+  })
+
+  it('installs PyTorch’s CPU build on Linux only', () => {
+    expect(torchBackendArgs('linux')).toEqual(['--torch-backend', 'cpu'])
+    expect(torchBackendArgs('darwin')).toEqual([])
+    expect(torchBackendArgs('win32')).toEqual([])
   })
 
   it('stores relative paths with forward slashes on every platform', () => {

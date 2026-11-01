@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events'
 import { existsSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { venvPython } from './platform'
+import { torchBackendArgs, venvPython } from './platform'
 
 // Locates (or installs) the Python environment that runs Demucs and the
 // analysis and transcription workers. A packaged .app can't ship a
@@ -97,7 +97,7 @@ export class PythonEnv extends EventEmitter {
     // Windows: compile the bytecode now. Otherwise the first separation or Notes
     // view compiles it (and Defender scans every new file): measured 38 s at 0 %.
     const compile = process.platform === 'win32' ? ['--compile-bytecode'] : []
-    return this.uvRun(['pip', 'install', ...compile, '--python', python, '-r', join(this.scriptsDir, 'requirements.txt')], onLine)
+    return this.uvRun(['pip', 'install', ...compile, ...torchBackendArgs(), '--python', python, '-r', join(this.scriptsDir, 'requirements.txt')], onLine)
   }
 
   /** Download cache: the packages are cloned into the environment, so it's only needed during an install. */

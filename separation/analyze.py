@@ -90,7 +90,8 @@ def track_beats(y):
         from beat_this.inference import Audio2Beats
         import torch
 
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
+        # Apple's GPU, an NVIDIA GPU (a CUDA build of PyTorch), or the CPU, as in separate.py.
+        device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
         beats, downbeats = Audio2Beats(checkpoint_path="final0", device=device, dbn=False)(y, SR)
         return [float(b) for b in beats], [float(d) for d in downbeats], "beat_this"
     except ImportError:

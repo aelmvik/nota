@@ -104,6 +104,15 @@ export function computerName(platform: Platform = process.platform): string {
   return platform === 'darwin' ? 'your Mac' : 'this computer'
 }
 
+/**
+ * uv's PyTorch index. PyPI's Linux PyTorch brings NVIDIA's CUDA libraries
+ * (about 2.5 GB), so Linux gets the CPU build; the Mac's and Windows' PyPI
+ * builds are the right ones already (Apple's GPU on the Mac, CPU on Windows).
+ */
+export function torchBackendArgs(platform: Platform = process.platform): string[] {
+  return platform === 'linux' ? ['--torch-backend', 'cpu'] : []
+}
+
 /** The standard VST3 plugin folders. */
 export function defaultVst3Dirs(platform: Platform = process.platform, home = homedir()): string[] {
   if (platform === 'darwin') return ['/Library/Audio/Plug-Ins/VST3', `${home}/Library/Audio/Plug-Ins/VST3`]
