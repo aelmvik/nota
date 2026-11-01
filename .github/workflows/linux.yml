@@ -5,7 +5,7 @@ name: Linux
 
 on:
   push:
-    branches: [main, linux]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
