@@ -488,6 +488,11 @@ private:
             const auto ok = e.setBypassed (msg["slotId"].toString(), (bool) msg["bypassed"]);
             respond (id, ok, ok ? juce::String() : "Unknown effect");
         }
+        else if (cmd == "setDarkWindows")
+        {
+            e.setDarkWindows ((bool) msg["dark"]);
+            respond (id, true);
+        }
         else if (cmd == "openEditor")
         {
             respond (id, true, e.openEditor (msg["slotId"].toString()));

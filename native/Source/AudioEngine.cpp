@@ -311,7 +311,16 @@ public:
         setResizable (editor->isResizable(), false);
         centreWithSize (getWidth(), getHeight());
         setVisible (true);
+        applyTheme();
         bringToFront();
+    }
+
+    /** Windows: the title bar follows Nøta's light or dark theme. */
+    void applyTheme()
+    {
+       #if JUCE_WINDOWS
+        setDarkTitleBar (getWindowHandle(), owner.darkWindows);
+       #endif
     }
 
     /** In front of Nøta's window: the engine is a separate app, behind it. */
@@ -1292,6 +1301,13 @@ juce::String AudioEngine::openEditor (const juce::String& slotId)
 
     editors.push_back (std::make_unique<EditorWindow> (*this, *slot, editor));
     return {};
+}
+
+void AudioEngine::setDarkWindows (bool dark)
+{
+    darkWindows = dark;
+    for (auto& w : editors)
+        w->applyTheme();
 }
 
 void AudioEngine::closeAllEditors()
