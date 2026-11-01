@@ -488,6 +488,12 @@ private:
             const auto ok = e.setBypassed (msg["slotId"].toString(), (bool) msg["bypassed"]);
             respond (id, ok, ok ? juce::String() : "Unknown effect");
         }
+        else if (cmd == "setWindowTheme")
+        {
+            const auto caption = msg["caption"].toString().trimCharactersAtStart ("#");
+            e.setWindowTheme ((bool) msg["dark"], caption.length() == 6 ? caption.getHexValue32() : -1);
+            respond (id, true);
+        }
         else if (cmd == "openEditor")
         {
             respond (id, true, e.openEditor (msg["slotId"].toString()));

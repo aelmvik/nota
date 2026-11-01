@@ -66,6 +66,9 @@ public:
     bool setBypassed (const juce::String& slotId, bool bypassed);
     juce::String openEditor (const juce::String& slotId);
     void closeAllEditors();
+    /** Plugin windows' title bars follow Nøta's theme and background colour (0xRRGGBB, or -1)
+        on Windows; elsewhere the system draws them. */
+    void setWindowTheme (bool dark, int captionRgb);
     juce::var getChainState();
     void clearChain();
 
@@ -129,6 +132,8 @@ private:
 
     class EditorWindow;
     std::vector<std::unique_ptr<EditorWindow>> editors;
+    bool darkWindows = false;
+    int windowCaption = -1;
 
     std::atomic<bool> monitoring { false };
     std::atomic<bool> outputIncludesBass { true };
