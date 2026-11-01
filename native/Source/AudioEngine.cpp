@@ -189,10 +189,10 @@ namespace
         while (count > 0 && names[count - 1].startsWith ("monitor_"))
             --count;
         // A stereo or mono device (FL, FR / MONO) is in hardware order: Input 1, 2.
-        const auto suffix = [&names] (int i) { return names[i].fromFirstOccurrenceOf ("_", false, false); };
-        if (count == 1 && suffix (0) == "MONO")
+        const auto portSuffix = [&names] (int i) { return names[i].fromFirstOccurrenceOf ("_", false, false); };
+        if (count == 1 && portSuffix (0) == "MONO")
             return { label + " 1" };
-        if (count == 2 && suffix (0) == "FL" && suffix (1) == "FR")
+        if (count == 2 && portSuffix (0) == "FL" && portSuffix (1) == "FR")
             return { label + " 1", label + " 2" };
         juce::StringArray out;
         for (int i = 0; i < count; ++i)
@@ -299,6 +299,72 @@ namespace
 }
 
 //==============================================================================
+#if JUCE_LINUX
+/**
+ * Linux: the desktop draws a native title bar in its own theme, and an app can't
+ * colour another window's. Plugin windows draw their own instead, in Nøta's
+ * background colour, with the name and a plain close button in a contrasting one,
+ * as Nøta's own window does, and round their top corners as desktop windows are.
+ */
+class PluginWindowLook : public juce::LookAndFeel_V4
+{
+public:
+    static constexpr float cornerRadius = 12.0f;
+
+    void setColours (juce::Colour background)
+    {
+        bar = background;
+        text = background.getPerceivedBrightness() > 0.5f ? juce::Colour (0xff1e1f22) : juce::Colour (0xffe8e9e8);
+    }
+
+    void drawDocumentWindowTitleBar (juce::DocumentWindow& window, juce::Graphics& g, int w, int h,
+                                     int titleSpaceX, int titleSpaceW, const juce::Image*, bool) override
+    {
+        g.fillAll (bar);
+        g.setColour (text.withAlpha (window.isActiveWindow() ? 1.0f : 0.6f));
+        const juce::Font font (juce::FontOptions ((float) h * 0.42f, juce::Font::bold));
+        g.setFont (font);
+        // Centred on the whole bar, not just the space left of the close button.
+        const auto textW = juce::jmin (titleSpaceW, juce::GlyphArrangement::getStringWidthInt (font, window.getName()));
+        const auto textX = juce::jlimit (titleSpaceX, titleSpaceX + titleSpaceW - textW, (w - textW) / 2);
+        g.drawText (window.getName(), textX, 0, textW, h, juce::Justification::centred, true);
+    }
+
+    juce::Button* createDocumentWindowButton (int) override { return new CloseButton (*this); }
+
+    void positionDocumentWindowButtons (juce::DocumentWindow&, int titleBarX, int titleBarY, int titleBarW, int titleBarH,
+                                        juce::Button*, juce::Button*, juce::Button* closeButton, bool) override
+    {
+        if (closeButton != nullptr)
+            closeButton->setBounds (titleBarX + titleBarW - titleBarH, titleBarY, titleBarH, titleBarH);
+    }
+
+    juce::Colour bar { 0xfff4f5f4 }, text { 0xff1e1f22 };
+
+private:
+    struct CloseButton : public juce::Button
+    {
+        explicit CloseButton (PluginWindowLook& lookIn) : Button ("close"), look (lookIn) {}
+
+        void paintButton (juce::Graphics& g, bool over, bool down) override
+        {
+            auto r = getLocalBounds().toFloat().reduced ((float) getHeight() * 0.22f);
+            if (over || down)
+            {
+                g.setColour (look.text.withAlpha (down ? 0.2f : 0.1f));
+                g.fillEllipse (r);
+            }
+            g.setColour (look.text);
+            const auto c = r.reduced (r.getWidth() * 0.32f);
+            g.drawLine ({ c.getTopLeft(), c.getBottomRight() }, 1.5f);
+            g.drawLine ({ c.getTopRight(), c.getBottomLeft() }, 1.5f);
+        }
+
+        PluginWindowLook& look;
+    };
+};
+#endif
+
 class AudioEngine::EditorWindow : public juce::DocumentWindow
 {
 public:
@@ -306,7 +372,16 @@ public:
         : DocumentWindow (slot.name, juce::Colour (0xff1b1d21), DocumentWindow::closeButton),
           owner (ownerIn), slotId (slot.slotId)
     {
+       #if JUCE_LINUX
+        setLookAndFeel (&look);
+        setUsingNativeTitleBar (false);
+        setTitleBarHeight (36);
+        // See-through, so the rounded corners show the desktop behind them.
+        setOpaque (false);
+        addToDesktop (getDesktopWindowStyleFlags());
+       #else
         setUsingNativeTitleBar (true);
+       #endif
         setContentOwned (editor, true);
         setResizable (editor->isResizable(), false);
         centreWithSize (getWidth(), getHeight());
@@ -315,11 +390,19 @@ public:
         bringToFront();
     }
 
-    /** Windows: the title bar follows Nøta's light or dark theme. */
+    /** Windows and Linux: the title bar follows Nøta's light or dark theme, in its background colour. */
     void applyTheme()
     {
        #if JUCE_WINDOWS
         setTitleBarTheme (getWindowHandle(), owner.darkWindows, owner.windowCaption);
+       #elif JUCE_LINUX
+        const auto background = owner.windowCaption >= 0 ? juce::Colour ((juce::uint32) owner.windowCaption).withAlpha (1.0f)
+                                                         : juce::Colour (owner.darkWindows ? 0xff1e1f22 : 0xfff4f5f4);
+        look.setColours (background);
+        // Not setBackgroundColour(): it makes an opaque colour's window opaque, and the
+        // rounded corners need the window see-through.
+        setColour (juce::ResizableWindow::backgroundColourId, background);
+        repaint();
        #endif
     }
 
@@ -356,6 +439,24 @@ public:
         juce::MessageManager::callAsync ([engine, id] { engine->closeEditor (id); });
     }
 
+   #if JUCE_LINUX
+    void paint (juce::Graphics& g) override
+    {
+        juce::Path shape;
+        const auto r = PluginWindowLook::cornerRadius;
+        shape.addRoundedRectangle (0.0f, 0.0f, (float) getWidth(), (float) getHeight(), r, r, true, true, false, false);
+        g.reduceClipRegion (shape);
+        DocumentWindow::paint (g);
+    }
+
+    ~EditorWindow() override
+    {
+        clearContentComponent();
+        setLookAndFeel (nullptr);
+    }
+
+    PluginWindowLook look;
+   #endif
     AudioEngine& owner;
     juce::String slotId;
     /** When the window last stopped being the active one (0: not yet). */
