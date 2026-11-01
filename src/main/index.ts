@@ -59,8 +59,8 @@ const pythonEnv = new PythonEnv(scriptsDir, join(bulkData, 'python-env'), uv, ap
 const provider = new DemucsProvider({ env: pythonEnv, model: process.env.NOTA_SEPARATION_MODEL || 'htdemucs', ffmpegPath: getTools().ffmpeg })
 const engine = new EngineHost(resolveEngineBinary(appRoot, process.resourcesPath))
 if (process.platform === 'win32') {
-  // Plugin windows' title bars follow the app's light or dark theme.
-  const sendTheme = () => void engine.call('setDarkWindows', { dark: nativeTheme.shouldUseDarkColors }).catch(() => {})
+  // Plugin windows' title bars follow the app's light or dark theme, in its background colour.
+  const sendTheme = () => void engine.call('setWindowTheme', { dark: nativeTheme.shouldUseDarkColors, caption: windowBackground() }).catch(() => {})
   engine.on('ready', sendTheme)
   nativeTheme.on('updated', sendTheme)
 }

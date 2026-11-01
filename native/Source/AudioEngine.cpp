@@ -319,7 +319,7 @@ public:
     void applyTheme()
     {
        #if JUCE_WINDOWS
-        setDarkTitleBar (getWindowHandle(), owner.darkWindows);
+        setTitleBarTheme (getWindowHandle(), owner.darkWindows, owner.windowCaption);
        #endif
     }
 
@@ -1303,9 +1303,10 @@ juce::String AudioEngine::openEditor (const juce::String& slotId)
     return {};
 }
 
-void AudioEngine::setDarkWindows (bool dark)
+void AudioEngine::setWindowTheme (bool dark, int captionRgb)
 {
     darkWindows = dark;
+    windowCaption = captionRgb;
     for (auto& w : editors)
         w->applyTheme();
 }
