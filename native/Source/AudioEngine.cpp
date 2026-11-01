@@ -333,6 +333,21 @@ public:
        #endif
     }
 
+    /** Whether the window is in front, or was until a moment ago: a click in Nøta's
+        Mixer makes Nøta's window active first, so a window that was in front has only
+        just stopped being active when the click arrives. */
+    bool wasInFront() const
+    {
+        return isActiveWindow() || juce::Time::getMillisecondCounter() - lastActive < 800;
+    }
+
+    void activeWindowStatusChanged() override
+    {
+        DocumentWindow::activeWindowStatusChanged();
+        if (! isActiveWindow())
+            lastActive = juce::Time::getMillisecondCounter();
+    }
+
     void closeButtonPressed() override
     {
         // Not from inside this window's own callback: it deletes the window.
@@ -343,6 +358,8 @@ public:
 
     AudioEngine& owner;
     juce::String slotId;
+    /** When the window last stopped being the active one (0: not yet). */
+    juce::uint32 lastActive = 0;
 };
 
 //==============================================================================
@@ -1285,7 +1302,11 @@ juce::String AudioEngine::toggleEditor (const juce::String& slotId)
     {
         if (w->slotId == slotId)
         {
-            closeEditor (slotId);
+            // In front: close it. Behind Nøta (you clicked Nøta since): bring it back.
+            if (w->wasInFront())
+                closeEditor (slotId);
+            else
+                w->bringToFront();
             return {};
         }
     }

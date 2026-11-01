@@ -65,7 +65,7 @@ public:
     void setOutputIncludesBass (bool include) { outputIncludesBass.store (include); }
     bool setBypassed (const juce::String& slotId, bool bypassed);
     juce::String openEditor (const juce::String& slotId);
-    /** Closes the effect's window if it's open, otherwise opens it (a click in the Mixer). */
+    /** A click in the Mixer: opens the effect's window, brings it back in front of Nøta, or closes it if it was in front. */
     juce::String toggleEditor (const juce::String& slotId);
     void closeEditor (const juce::String& slotId);
     void closeAllEditors();
