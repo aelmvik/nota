@@ -58,7 +58,7 @@ const uv =existsSync(join(toolsDir, exe('uv'))) ? join(toolsDir, exe('uv')) : nu
 const pythonEnv = new PythonEnv(scriptsDir, join(bulkData, 'python-env'), uv, app.isPackaged ? [] : [venvPython(join(appRoot, 'separation', '.venv'))])
 const provider = new DemucsProvider({ env: pythonEnv, model: process.env.NOTA_SEPARATION_MODEL || 'htdemucs', ffmpegPath: getTools().ffmpeg })
 const engine = new EngineHost(resolveEngineBinary(appRoot, process.resourcesPath))
-if (process.platform === 'win32') {
+if (process.platform === 'win32' || process.platform === 'darwin') {
   // Plugin windows' title bars follow the app's light or dark theme, in its background colour.
   const sendTheme = () => void engine.call('setWindowTheme', { dark: nativeTheme.shouldUseDarkColors, caption: windowBackground() }).catch(() => {})
   engine.on('ready', sendTheme)

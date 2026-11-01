@@ -61,6 +61,9 @@ if(APPLE)
         SIGNALSMITH_USE_ACCELERATE=1
         ACCELERATE_NEW_LAPACK=1)
     target_link_libraries(NotaEngine PRIVATE "-framework Accelerate")
+    # Plugin windows in Nøta's theme, whatever the Mac is set to.
+    enable_language(OBJCXX)
+    target_sources(NotaEngine PRIVATE Source/MacWindows.mm)
 endif()
 
 # Windows: what kind of device each audio endpoint is (microphone, speakers, Bluetooth),

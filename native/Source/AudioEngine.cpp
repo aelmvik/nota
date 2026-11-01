@@ -3,6 +3,7 @@
 
 #if JUCE_MAC
  #include <CoreAudio/CoreAudio.h>
+ #include "MacWindows.h"
 #elif JUCE_WINDOWS
  #include "WindowsDevices.h"
  #include "WindowsForeground.h"
@@ -315,11 +316,13 @@ public:
         bringToFront();
     }
 
-    /** Windows: the title bar follows Nøta's light or dark theme. */
+    /** The title bar follows Nøta's light or dark theme, in its background colour. */
     void applyTheme()
     {
        #if JUCE_WINDOWS
         setTitleBarTheme (getWindowHandle(), owner.darkWindows, owner.windowCaption);
+       #elif JUCE_MAC
+        setMacWindowTheme (getWindowHandle(), owner.darkWindows, owner.windowCaption);
        #endif
     }
 

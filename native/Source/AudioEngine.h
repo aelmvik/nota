@@ -70,7 +70,7 @@ public:
     void closeEditor (const juce::String& slotId);
     void closeAllEditors();
     /** Plugin windows' title bars follow Nøta's theme and background colour (0xRRGGBB, or -1)
-        on Windows; elsewhere the system draws them. */
+        on Windows and the Mac; on Linux the window manager draws them. */
     void setWindowTheme (bool dark, int captionRgb);
     juce::var getChainState();
     void clearChain();
