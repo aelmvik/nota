@@ -173,7 +173,8 @@ namespace
      * so it reads "Input 1" …. A port named after a speaker comes from a surround
      * profile, whose order isn't the hardware's (on a USB interface in "Analog
      * Surround 7.1", hardware input 3 is FC, the fifth port), so it keeps its
-     * speaker name, readably. PipeWire also lists an output's monitor ports as
+     * speaker name, readably (a stereo or mono device's two or one are in hardware
+     * order, so they read "Input 1", "Input 2"). PipeWire also lists an output's monitor ports as
      * inputs; they're left out when they come last, so the indexes JUCE connects
      * by stay the same.
      */
@@ -186,6 +187,12 @@ namespace
         int count = names.size();
         while (count > 0 && names[count - 1].startsWith ("monitor_"))
             --count;
+        // A stereo or mono device (FL, FR / MONO) is in hardware order: Input 1, 2.
+        const auto suffix = [&names] (int i) { return names[i].fromFirstOccurrenceOf ("_", false, false); };
+        if (count == 1 && suffix (0) == "MONO")
+            return { label + " 1" };
+        if (count == 2 && suffix (0) == "FL" && suffix (1) == "FR")
+            return { label + " 1", label + " 2" };
         juce::StringArray out;
         for (int i = 0; i < count; ++i)
         {
@@ -465,7 +472,11 @@ juce::var AudioEngine::getDeviceState()
             pluginLatency = chainLatency (false) + (outputIncludesBass.load() ? chainLatency (true) : 0);
         }
 
-        const auto totalSamples = device->getInputLatencyInSamples() + device->getOutputLatencyInSamples() + bs + pluginLatency;
+        auto totalSamples = device->getInputLatencyInSamples() + device->getOutputLatencyInSamples() + bs + pluginLatency;
+       #if JUCE_LINUX
+        if (deviceManager.getCurrentAudioDeviceType() == "JACK")
+            totalSamples -= bs; // JACK's latency ranges include the period
+       #endif
         state->setProperty ("outputLatencySamples", device->getOutputLatencyInSamples());
         state->setProperty ("pluginLatencySamples", pluginLatency);
         // Round trip only means something with the input open.
@@ -721,10 +732,25 @@ double AudioEngine::getOutputLatencySeconds()
         const auto sr = device->getCurrentSampleRate();
         // The song is heard later by the output chain's latency too.
         const int outputChain = outputChainLatency.load (std::memory_order_relaxed);
+       #if JUCE_LINUX
+        // JACK's playback latency already counts the period the block is written in.
+        if (sr > 0 && deviceManager.getCurrentAudioDeviceType() == "JACK")
+            return (device->getOutputLatencyInSamples() + outputChain) / sr;
+       #endif
         if (sr > 0)
             return (device->getOutputLatencyInSamples() + device->getCurrentBufferSizeSamples() + outputChain) / sr;
     }
     return 0.0;
+}
+
+int AudioEngine::snapshotBlocksAhead()
+{
+   #if JUCE_LINUX
+    // JACK runs the callback in the cycle whose output its latency is measured from.
+    if (deviceManager.getCurrentAudioDeviceType() == "JACK")
+        return 0;
+   #endif
+    return 2;
 }
 
 void AudioEngine::audioDeviceStopped()

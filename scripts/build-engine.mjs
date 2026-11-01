@@ -16,7 +16,8 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', cwd: root
 // Pinned sources, cloned once into native/third_party.
 const deps = [
   // Windows: shared-mode WASAPI devices open in a fraction of a second instead of 2–7 s.
-  { name: 'JUCE', tag: '8.0.4', url: 'https://github.com/juce-framework/JUCE.git', dir: juceDir, patches: process.platform === 'win32' ? ['juce-wasapi-shared-channels.patch'] : [] },
+  // Linux: JACK reports its real latency (the latency range), so the playhead is on time.
+  { name: 'JUCE', tag: '8.0.4', url: 'https://github.com/juce-framework/JUCE.git', dir: juceDir, patches: { win32: ['juce-wasapi-shared-channels.patch'], linux: ['juce-jack-latency-range.patch'] }[process.platform] ?? [] },
   // Time stretch and key change (MIT), and the FFT library it uses.
   { name: 'Signalsmith Stretch', tag: '1.4.0', url: 'https://github.com/Signalsmith-Audio/signalsmith-stretch.git', dir: join(nativeDir, 'third_party', 'signalsmith-stretch'), patches: ['signalsmith-stretch-pitch-accuracy.patch'] },
   { name: 'Signalsmith Linear', tag: '0.6.4', url: 'https://github.com/Signalsmith-Audio/linear.git', dir: join(nativeDir, 'third_party', 'signalsmith-linear') }
@@ -28,7 +29,10 @@ for (const dep of deps) {
   run('git', ['-c', 'core.autocrlf=false', 'clone', '--depth', '1', '--branch', dep.tag, dep.url, dep.dir])
 }
 
-// Local fixes on top of the pinned sources (native/patches), applied once.
+// Local fixes on top of the pinned sources (native/patches), applied once. The
+// patches are stored with LF line endings and some JUCE files use CRLF:
+// core.autocrlf=true lets git apply compare them line by line on every platform
+// (Git for Windows has it on by default).
 const quiet = (cmd, args, cwd) => {
   try {
     execFileSync(cmd, args, { stdio: 'ignore', cwd })
@@ -40,9 +44,9 @@ const quiet = (cmd, args, cwd) => {
 for (const dep of deps) {
   for (const name of dep.patches ?? []) {
     const patch = join(nativeDir, 'patches', name)
-    if (quiet('git', ['apply', '--reverse', '--check', patch], dep.dir)) continue
+    if (quiet('git', ['-c', 'core.autocrlf=true', 'apply', '--reverse', '--check', patch], dep.dir)) continue
     console.log(`Applying ${name} …`)
-    execFileSync('git', ['apply', patch], { stdio: 'inherit', cwd: dep.dir })
+    execFileSync('git', ['-c', 'core.autocrlf=true', 'apply', patch], { stdio: 'inherit', cwd: dep.dir })
   }
 }
 

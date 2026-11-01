@@ -1,0 +1,41 @@
+diff --git a/modules/juce_audio_devices/native/juce_JackAudio_linux.cpp b/modules/juce_audio_devices/native/juce_JackAudio_linux.cpp
+index 9681d5f..49eaaca 100644
+--- a/modules/juce_audio_devices/native/juce_JackAudio_linux.cpp
++++ b/modules/juce_audio_devices/native/juce_JackAudio_linux.cpp
+@@ -75,6 +75,7 @@ JUCE_DECL_VOID_JACK_FUNCTION (jack_on_shutdown, (jack_client_t* client, void (*f
+ JUCE_DECL_VOID_JACK_FUNCTION (jack_on_info_shutdown, (jack_client_t* client, JackInfoShutdownCallback function, void* arg), (client, function, arg))
+ JUCE_DECL_JACK_FUNCTION (void* , jack_port_get_buffer, (jack_port_t* port, jack_nframes_t nframes), (port, nframes))
+ JUCE_DECL_JACK_FUNCTION (jack_nframes_t, jack_port_get_total_latency, (jack_client_t* client, jack_port_t* port), (client, port))
++JUCE_DECL_VOID_JACK_FUNCTION (jack_port_get_latency_range, (jack_port_t* port, jack_latency_callback_mode_t mode, jack_latency_range_t* range), (port, mode, range))
+ JUCE_DECL_JACK_FUNCTION (jack_port_t* , jack_port_register, (jack_client_t* client, const char* port_name, const char* port_type, unsigned long flags, unsigned long buffer_size), (client, port_name, port_type, flags, buffer_size))
+ JUCE_DECL_VOID_JACK_FUNCTION (jack_set_error_function, (void (*func) (const char*)), (func))
+ JUCE_DECL_JACK_FUNCTION (int, jack_set_process_callback, (jack_client_t* client, JackProcessCallback process_callback, void* arg), (client, process_callback, arg))
+@@ -408,8 +409,14 @@ public:
+     {
+         int latency = 0;
+ 
++        // The latency range (JACK 1.9.7+, PipeWire): the deprecated total latency
++        // leaves out the period and reads 0 on PipeWire.
+         for (int i = 0; i < outputPorts.size(); i++)
+-            latency = jmax (latency, (int) juce::jack_port_get_total_latency (client, outputPorts[i]));
++        {
++            jack_latency_range_t range { 0, 0 };
++            juce::jack_port_get_latency_range (outputPorts[i], JackPlaybackLatency, &range);
++            latency = jmax (latency, (int) range.max);
++        }
+ 
+         return latency;
+     }
+@@ -419,7 +426,11 @@ public:
+         int latency = 0;
+ 
+         for (int i = 0; i < inputPorts.size(); i++)
+-            latency = jmax (latency, (int) juce::jack_port_get_total_latency (client, inputPorts[i]));
++        {
++            jack_latency_range_t range { 0, 0 };
++            juce::jack_port_get_latency_range (inputPorts[i], JackCaptureLatency, &range);
++            latency = jmax (latency, (int) range.max);
++        }
+ 
+         return latency;
+     }

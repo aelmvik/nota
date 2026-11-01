@@ -235,7 +235,7 @@ private:
         }
         // Song position at 60 Hz while playing (the UI interpolates between reports).
         if (song.wantsSnapshot())
-            Protocol::sendEvent ("transport", song.takeSnapshot (engine->getOutputLatencySeconds()));
+            Protocol::sendEvent ("transport", song.takeSnapshot (engine->getOutputLatencySeconds(), engine->snapshotBlocksAhead()));
 
         if ((++tick % 2) != 0)
             return;

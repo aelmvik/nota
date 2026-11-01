@@ -1989,7 +1989,7 @@ bool SongPlayer::wantsSnapshot() const
            || s.seq != l.seq || s.ended != l.ended || s.length != l.length || s.buffering != l.buffering;
 }
 
-juce::DynamicObject::Ptr SongPlayer::takeSnapshot (double outputLatencySeconds)
+juce::DynamicObject::Ptr SongPlayer::takeSnapshot (double outputLatencySeconds, int blocksAhead)
 {
     auto& p = *impl;
     const auto s = p.readSnap();
@@ -1997,11 +1997,11 @@ juce::DynamicObject::Ptr SongPlayer::takeSnapshot (double outputLatencySeconds)
     p.forceSnapshot = false;
 
     // Date the position to when it is heard: this block plays after the one
-    // now playing, plus the device's own output latency.
+    // now playing (blocksAhead, 2 by default), plus the device's own output latency.
     const auto nowTicks = juce::Time::getHighResolutionTicks();
     const double nowMs = std::chrono::duration<double, std::milli> (std::chrono::system_clock::now().time_since_epoch()).count();
     const double ageMs = juce::Time::highResolutionTicksToSeconds (nowTicks - s.ticks) * 1000.0;
-    const double aheadMs = s.sampleRate > 0 ? (2.0 * s.frames / s.sampleRate + outputLatencySeconds) * 1000.0 : 0.0;
+    const double aheadMs = s.sampleRate > 0 ? ((double) blocksAhead * s.frames / s.sampleRate + outputLatencySeconds) * 1000.0 : 0.0;
 
     static const char* states[] = { "stopped", "starting", "countIn", "playing" };
     auto o = juce::DynamicObject::Ptr (new juce::DynamicObject());

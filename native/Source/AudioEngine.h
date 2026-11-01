@@ -87,6 +87,8 @@ public:
 
     /** Device output latency (driver + one buffer), for dating position reports. */
     double getOutputLatencySeconds();
+    /** Blocks between the one being rendered and the one being heard, before the output latency. */
+    int snapshotBlocksAhead();
 
     // Tuner: the audio thread copies the (trimmed) input into a ring buffer;
     // detectPitch() runs YIN on it from the message thread.

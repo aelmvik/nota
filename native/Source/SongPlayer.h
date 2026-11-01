@@ -74,8 +74,9 @@ public:
     void setLightweight (bool lightweight);
 
     //==============================================================================
-    /** Transport state for the UI; `outputLatencySeconds` dates the position to when it is heard. */
-    juce::DynamicObject::Ptr takeSnapshot (double outputLatencySeconds);
+    /** Transport state for the UI; `outputLatencySeconds` dates the position to when it is heard,
+        after `blocksAhead` more blocks (see AudioEngine::snapshotBlocksAhead). */
+    juce::DynamicObject::Ptr takeSnapshot (double outputLatencySeconds, int blocksAhead = 2);
     /** True when something changed since the last snapshot, or while playing. */
     bool wantsSnapshot() const;
     /** Audio thread, right after process(): the song position at the end of that block, and whether it was playing. */
