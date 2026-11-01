@@ -219,6 +219,8 @@ function DeckInner({ song }: { song: Song }) {
   const waveKind = mode === 'bass' ? 'bass' : mode === 'playalong' ? 'backing' : 'original'
   // Notes work in every mode: read the bass line while hearing the original or the play-along.
   const showNotes = mode !== null && deckView === 'notes'
+  // Correcting the notes (the Notes view's edit mode)
+  const [noteEditing, setNoteEditing] = useState(false)
   // Time zoom and position, shared by the waveform and the Notes view.
   const [view, setView] = useState<View>({ start: 0, span: song.durationSec || 1 })
   // In display time (the song without its cuts). A new song starts at the
@@ -370,6 +372,20 @@ function DeckInner({ song }: { song: Song }) {
             ))}
           </div>
         )}
+        {showNotes && (
+          <div className="seg view-switch">
+            <button
+              type="button"
+              aria-pressed={noteEditing}
+              title={noteEditing ? 'Stop editing the notes (E)' : song.editedNotes ? 'Edit the notes (E). You’ve corrected them already' : 'Edit the notes (E): add, move, resize and delete them'}
+              className={noteEditing ? 'is-active' : ''}
+              onClick={() => setNoteEditing((v) => !v)}
+            >
+              <Icon name="edit" size={14} />
+              <span className="view-switch-label">{noteEditing ? 'Editing' : song.editedNotes ? 'Edited' : 'Edit'}</span>
+            </button>
+          </div>
+        )}
         <ModeSelector song={song} />
       </div>
 
@@ -393,6 +409,8 @@ function DeckInner({ song }: { song: Song }) {
             onUserScroll={scrolledByUser}
             cuts={song.cuts}
             take={take}
+            editing={noteEditing}
+            onEditingChange={setNoteEditing}
           />
         ) : (
         <Waveform

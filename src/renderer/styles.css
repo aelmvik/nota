@@ -1209,7 +1209,19 @@ body.is-resizing, body.is-resizing * { cursor: ns-resize !important; user-select
 .notes-view { position: relative; height: 100%; background: var(--display); overflow: hidden; }
 .notes-keys { position: absolute; left: 0; top: 0; cursor: ns-resize; }
 .notes-roll { position: absolute; top: 0; cursor: pointer; touch-action: none; }
-.notes-ruler { position: absolute; right: 0; bottom: 0; height: 18px; background: var(--display); border-top: 1px solid var(--line); overflow: hidden; }
+.notes-ruler { position: absolute; right: 0; bottom: 0; height: 18px; background: var(--display); border-top: 1px solid var(--line); overflow: hidden; cursor: pointer; touch-action: none; }
+/* Edit mode's cursor: a note's start line with a note block, where a click puts one. */
+.notes-roll[data-editing] {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M2.5 3v14' stroke='white' stroke-width='3.2' stroke-linecap='round'/%3E%3Crect x='2.5' y='7' width='12' height='6' rx='2' fill='black' stroke='white' stroke-width='1.2'/%3E%3Cpath d='M2.5 3v14' stroke='black' stroke-width='1.2' stroke-linecap='round'/%3E%3C/svg%3E") 2 10, crosshair;
+}
+/* Edit mode: how editing works (Shortcuts), and the way back to the transcription */
+.notes-edit-bar {
+  position: absolute; left: 56px; bottom: 26px; z-index: 3;
+  display: flex; align-items: center; gap: 2px; padding: 2px;
+  border-radius: var(--radius); border: 1px solid var(--line-strong);
+  background: var(--raised); box-shadow: var(--raise);
+}
+.view-switch-label { margin-left: 6px; font-size: 12.5px; }
 .notes-ruler span { position: absolute; top: 1px; transform: translateX(3px); font: 600 13px var(--num); color: var(--ink-3); white-space: nowrap; }
 .notes-ruler span::before { content: ''; position: absolute; left: -3px; top: -1px; width: 1px; height: 6px; background: var(--line-strong); }
 .notes-message { position: absolute; inset: 0 0 18px 48px; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--ink-2); font-size: 13px; font-style: italic; pointer-events: none; }

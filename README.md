@@ -15,7 +15,7 @@ A bass practice app for macOS (Apple Silicon) and Windows. Import the songs you 
 ## Features
 
 - **Stem separation** with Demucs, running on your own computer: on the Apple GPU on a Mac, on an NVIDIA GPU or the CPU on Windows. Nothing is uploaded anywhere.
-- **Notes view:** switch the waveform to a piano roll of the bass line, transcribed from the separated bass, with note names on every note. It works in every mode, so you can read the notes while hearing the original or the play-along.
+- **Notes view:** switch the waveform to a piano roll of the bass line, transcribed from the separated bass, with note names on every note. It works in every mode, so you can read the notes while hearing the original or the play-along. When the transcription gets a note wrong, press **E** (or **Edit**) to correct it, as in a DAW's piano roll: click to add a note, drag to move it, drag its end to resize, right-click to delete. Your corrections are saved with the song in the project, and one click goes back to the transcription.
 - **Takes:** press ● to record yourself playing along (your clean bass, before its effects). Your notes are then drawn over the song's in the Notes view, lined up with the song even through speed changes and loops. Only the latest take per song is kept, as notes.
 - **Loops and slow-down:** Ctrl+drag a loop on the waveform, snapped to the beat. Loops, mode switches and the click are sample-accurate. Speed is 25–150% with the pitch kept. A **speed trainer** raises the speed a step every few loops.
 - **Key and tuning:** transpose ±12 semitones and fine-tune ±50 cents, independent of speed, live and instant. **Match A440** lines up recordings that aren't at standard pitch with your bass.

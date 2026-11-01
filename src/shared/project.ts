@@ -2,6 +2,7 @@ import { recoverAfterRestart } from './processing'
 import { clampPitch, tempoFromBpm } from './music'
 import type { AudioConfig, MetronomeSettings, PlaybackMode, Project, Song, SongPatch, SpeedTrainer, StemKind } from './types'
 import { normalizeCuts } from './cuts'
+import { normalizeNotes } from './noteEdit'
 
 // Pure project operations. Every function returns a new Project and never
 // mutates its input, which keeps them trivially testable and lets the main
@@ -84,7 +85,8 @@ export function makeSong(init: NewSong): Song {
     separation: { status: 'pending', progress: 0 },
     stems: {},
     addedAt: now(),
-    practiceSec: 0
+    practiceSec: 0,
+    editedNotes: null
   }
 }
 
@@ -220,6 +222,7 @@ export function updateSong(p: Project, id: string, patch: SongPatch): Project {
     if (patch.trainer !== undefined) next.trainer = patch.trainer ? normalizeTrainer(patch.trainer) : null
     if (patch.title !== undefined && patch.title.trim()) next.title = patch.title.trim()
     if (patch.artist !== undefined) next.artist = patch.artist?.trim() || null
+    if (patch.notes !== undefined) next.editedNotes = patch.notes ? normalizeNotes(patch.notes, s.durationSec) : null
     return next
   })
 }
@@ -307,7 +310,8 @@ export function parseProject(json: string): Project {
           : { status: 'pending' },
       separation: recoverAfterRestart(song.separation ?? { status: 'pending', progress: 0 }),
       source: { ...song.source, missing: false },
-      practiceSec: typeof song.practiceSec === 'number' && song.practiceSec > 0 ? song.practiceSec : 0
+      practiceSec: typeof song.practiceSec === 'number' && song.practiceSec > 0 ? song.practiceSec : 0,
+      editedNotes: Array.isArray(song.editedNotes) ? normalizeNotes(song.editedNotes, song.durationSec) : null
     }
   })
 

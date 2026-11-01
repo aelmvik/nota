@@ -154,9 +154,11 @@ const SONG_EDIT_LABELS: Record<string, string> = {
   downbeat: 'Bar start',
   gridScale: 'Half/double time',
   evenBars: 'Even bars',
-  trainer: 'Speed trainer'
+  trainer: 'Speed trainer',
+  notes: 'Edit notes'
 }
-const songEditLabel = (patch: SongPatch) => SONG_EDIT_LABELS[Object.keys(patch)[0] ?? ''] ?? 'Edit song'
+const songEditLabel = (patch: SongPatch) =>
+  patch.notes === null ? 'Back to transcription' : (SONG_EDIT_LABELS[Object.keys(patch)[0] ?? ''] ?? 'Edit song')
 
 /** Undo or redo one project edit; effects and levels are re-applied to the engine. */
 async function stepHistory(direction: 'undo' | 'redo'): Promise<string | null> {

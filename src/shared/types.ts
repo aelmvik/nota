@@ -156,6 +156,8 @@ export interface Song {
   addedAt: string
   /** Seconds this song has been practised (played) */
   practiceSec: number
+  /** The bass notes as you corrected them in the Notes view (song time, original key); null = the transcription */
+  editedNotes: BassNote[] | null
 }
 
 export interface EffectSlot {
@@ -262,6 +264,8 @@ export interface SongPatch {
   position?: number
   title?: string
   artist?: string | null
+  /** Edited bass notes; null goes back to the transcription */
+  notes?: BassNote[] | null
 }
 
 export interface ImportResult {

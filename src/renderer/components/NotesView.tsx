@@ -2,10 +2,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, t
 import { CutMap, cutGrid, cutRegion, isBarLine } from '../../shared/cuts'
 import type { GridLike } from '../../shared/music'
 import type { TakeState } from '../../shared/takes'
+import { copyNotes, MIN_NOTE_SEC, NEW_NOTE_VELOCITY, normalizeNotes, noteKey, NOTE_PITCH_MAX, NOTE_PITCH_MIN, pasteNotes, type NoteClip } from '../../shared/noteEdit'
 import type { BassNote, LoopRegion, NotesState, Song } from '../../shared/types'
-import { useStore } from '../state/store'
+import { attempt, useStore } from '../state/store'
 import { useColorScheme } from '../theme'
 import { Button } from './ui'
+import { showNoteEditKeys } from './Shortcuts'
 import { followStart, formatPosition, snapToGrid, zoomAnchor, type View } from './Waveform'
 import { flipHeld, flipKey } from '../platform'
 
@@ -15,6 +17,13 @@ import { flipHeld, flipKey } from '../platform'
 // along, click seeks); ⌘+scroll (Alt+scroll off the Mac) zooms the pitch axis, plain scroll moves up
 // and down the keyboard, and double-clicking the keyboard fits all notes.
 // Ctrl+right-click fits both: the whole song and all its notes.
+//
+// Edit mode (E, or Edit by the view switch) corrects the notes as in FL
+// Studio's piano roll: click adds a note (as long as the last one you touched),
+// drag moves, dragging the end resizes, Shift+drag copies, right-click (and
+// drag) deletes, Ctrl+drag selects. Snapped to the grid (⌘/Alt for free);
+// the arrows move the selection, Delete deletes, and copy and paste work. The
+// ruler seeks meanwhile. Edits are saved on the song (Song.editedNotes).
 
 const NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B']
 const pc = (m: number) => ((m % 12) + 12) % 12
@@ -28,6 +37,19 @@ const PITCH_MAX = 96 // C7
 /** Row height limits in pixels (⌘+scroll zooms between them) */
 const ROW_H_MIN = 4
 const ROW_H_MAX = 48
+
+/** A note as shown: display time, and the key of the song's note it came from */
+type ShownNote = BassNote & { key: string }
+/** An edit in progress (display time), drawn until it's committed */
+interface Gesture {
+  changed: Map<string, BassNote>
+  added: BassNote[]
+  removed: Set<string>
+  box: { t0: number; t1: number; m0: number; m1: number } | null
+}
+const newGesture = (): Gesture => ({ changed: new Map(), added: [], removed: new Set(), box: null })
+/** Copied notes, shared by every song */
+let clipboard: NoteClip | null = null
 
 /** The song's notes, fetched (and transcribed on first use) while `enabled`. */
 export function useBassNotes(song: Song | null, enabled: boolean): NotesState | null {
@@ -138,11 +160,14 @@ interface Props {
   onUserScroll?: () => void
   /** Your latest take, drawn over the song's notes */
   take?: TakeState
+  /** Edit mode: the notes can be corrected */
+  editing?: boolean
+  onEditingChange?: (editing: boolean) => void
 }
 
 export function NotesView(props: Props) {
   // Display time, as on the waveform: the song with its cuts removed.
-  const { song, state, duration: songDuration, getPosition: rawGetPosition, isPlaying, onSeek: rawOnSeek, onLoopChange: rawOnLoopChange, loop: rawLoop, grid: songGrid, ruler, view, onViewChange: setView, cuts, following = true, onUserScroll, take: takeState } = props
+  const { song, state, duration: songDuration, getPosition: rawGetPosition, isPlaying, onSeek: rawOnSeek, onLoopChange: rawOnLoopChange, loop: rawLoop, grid: songGrid, ruler, view, onViewChange: setView, cuts, following = true, onUserScroll, take: takeState, editing = false, onEditingChange } = props
   const cutsKey = JSON.stringify(cuts)
   const cm = useMemo(() => new CutMap(cuts, songDuration), [cutsKey, songDuration])
   const duration = cm.kept
@@ -162,12 +187,22 @@ export function NotesView(props: Props) {
   // shows more or fewer rows at the same size; only ⌘+scroll changes the size.
   const [pitch, setPitch] = useState<{ center: number; rowH: number } | null>(null)
   const shift = song.pitch.semitones // show what you hear after a key change
-  const allNotes: BassNote[] = state?.status === 'ready' ? state.notes : []
+  // Your corrected notes when you've edited them, else the transcription. An edit
+  // shows at once (pending) and stays until the project comes back with it.
+  const [pending, setPending] = useState<BassNote[] | null>(null)
+  useEffect(() => setPending(null), [song.editedNotes])
+  const transcribed = state?.status === 'ready' ? state.notes : null
+  const allNotes: BassNote[] = pending ?? song.editedNotes ?? transcribed ?? []
   // Notes in display time; notes inside cuts are left out, notes across a cut's edge are shortened.
-  const notes = useMemo(
-    () => (cm.empty ? allNotes : allNotes.flatMap((n) => (cutRegion(n, cm) ? [cutRegion(n, cm)!] : []))),
-    [state, cm]
+  const notes = useMemo<ShownNote[]>(
+    () => allNotes.flatMap((n) => (cm.empty ? [{ ...n, key: noteKey(n) }] : cutRegion(n, cm) ? [{ ...cutRegion(n, cm)!, key: noteKey(n) }] : [])),
+    [allNotes, cm]
   )
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  useEffect(() => setSelected(new Set()), [song.id, editing])
+  const gesture = useRef<Gesture | null>(null)
+  /** The length of the note last touched: new notes get it (as in FL Studio) */
+  const lastLen = useRef<number | null>(null)
 
   // Your take, layered over the song's notes (in display time). It isn't graded:
   // both are transcriptions, and neither is exact.
@@ -189,7 +224,7 @@ export function NotesView(props: Props) {
     const hi = ps[Math.min(ps.length - 1, Math.floor(ps.length * 0.95))]
     const rows = Math.min(28, Math.max(14, hi - lo + 5))
     return { low: Math.max(PITCH_MIN, Math.round((lo + hi) / 2 - rows / 2)), rows }
-  }, [state, shift])
+  }, [state, shift, song.editedNotes])
   const fitAxis = (h: number) => ({ center: fit.low + fit.rows / 2, rowH: Math.min(ROW_H_MAX, Math.max(ROW_H_MIN, h / fit.rows)) })
 
   useEffect(() => {
@@ -276,8 +311,8 @@ export function NotesView(props: Props) {
   const showGrid = useStore((s) => s.prefs.showGrid)
   // With the metronome's accent off, bar lines look like the other beats too
   const accentBars = useStore((s) => s.snapshot?.project?.metronome.accent !== false)
-  const live = useRef({ view, P, notes, loop, grid, showGrid, accentBars, colors, size, shift, getPosition, isPlaying, marks, duration, following, takeShown })
-  live.current = { view, P, notes, loop, grid, showGrid, accentBars, colors, size, shift, getPosition, isPlaying, marks, duration, following, takeShown }
+  const live = useRef({ view, P, notes, loop, grid, showGrid, accentBars, colors, size, shift, getPosition, isPlaying, marks, duration, following, takeShown, editing, selected })
+  live.current = { view, P, notes, loop, grid, showGrid, accentBars, colors, size, shift, getPosition, isPlaying, marks, duration, following, takeShown, editing, selected }
 
   // Draw every frame: rows, grid, loop, notes, playhead, keyboard.
   const paintRoll = useRef<() => void>(() => {})
@@ -364,7 +399,16 @@ export function NotesView(props: Props) {
       const labelSize = Math.min(11, rowH - 3)
       g.font = `600 ${labelSize}px Archivo, sans-serif`
       g.textBaseline = 'middle'
-      for (const n of L.notes) {
+      // An edit in progress replaces, adds or leaves out notes; what it moves is selected.
+      const gs = gesture.current
+      const shown: ShownNote[] = gs
+        ? [
+            ...L.notes.filter((n) => !gs.removed.has(n.key)).map((n) => (gs.changed.has(n.key) ? { ...gs.changed.get(n.key)!, key: n.key } : n)),
+            ...gs.added.map((n) => ({ ...n, key: '' }))
+          ]
+        : L.notes
+      const isSelected = (n: ShownNote) => L.editing && (n.key === '' || gs?.changed.has(n.key) || (!gs?.changed.size && L.selected.has(n.key)))
+      for (const n of shown) {
         if (n.end < start || n.start > start + span) continue
         const m = n.pitch + L.shift
         if (m < low - 1 || m > low + rows) continue
@@ -373,16 +417,17 @@ export function NotesView(props: Props) {
         const y = rowTop(m) + 1
         const hh = Math.max(2, rowH - 2)
         const on = pos >= n.start && pos < n.end
+        const picked = isSelected(n)
         if (on) sounding.add(m)
-        g.globalAlpha = on ? 1 : 0.55 + 0.4 * n.velocity
+        g.globalAlpha = on || picked ? 1 : 0.55 + 0.4 * n.velocity
         g.fillStyle = c.note
         g.beginPath()
         g.roundRect(x0, y, x1 - x0, hh, Math.min(3, hh / 2))
         g.fill()
-        if (on) {
+        if (on || picked) {
           g.globalAlpha = 1
           g.strokeStyle = c.ink
-          g.lineWidth = 1.5
+          g.lineWidth = picked ? 2 : 1.5
           g.stroke()
         }
         if (x1 - x0 >= 22 && rowH >= 10) {
@@ -397,6 +442,20 @@ export function NotesView(props: Props) {
         }
       }
       g.globalAlpha = 1
+      // Ctrl+drag's selection box.
+      if (gs?.box) {
+        const bx0 = toX(Math.min(gs.box.t0, gs.box.t1))
+        const bx1 = toX(Math.max(gs.box.t0, gs.box.t1))
+        const by0 = rowTop(Math.max(gs.box.m0, gs.box.m1))
+        const by1 = rowTop(Math.min(gs.box.m0, gs.box.m1)) + rowH
+        g.globalAlpha = 0.12
+        g.fillStyle = c.brand
+        g.fillRect(bx0, by0, bx1 - bx0, by1 - by0)
+        g.globalAlpha = 1
+        g.strokeStyle = c.brand
+        g.lineWidth = 1
+        g.strokeRect(Math.round(bx0) + 0.5, Math.round(by0) + 0.5, Math.round(bx1 - bx0), Math.round(by1 - by0))
+      }
       // Your take: slim bars along the bottom of their row, so the song's notes still show.
       g.globalAlpha = 0.95
       g.fillStyle = c.take
@@ -466,8 +525,294 @@ export function NotesView(props: Props) {
     return out
   }, [view, size.w, ruler, songGrid, cm])
 
-  const message =
-    !state || state.status === 'running'
+  // ---- Editing ----
+
+  /** Applies an edit (display time) to the song's notes and saves it; what it touched is selected. */
+  const commitNotes = (changed: Map<string, BassNote>, added: BassNote[], removed: ReadonlySet<string>) => {
+    const toSong = (n: BassNote): BassNote =>
+      cm.empty ? { start: n.start, end: n.end, pitch: n.pitch, velocity: n.velocity } : { start: cm.toSong(n.start), end: cm.toSong(n.end, 'before'), pitch: n.pitch, velocity: n.velocity }
+    const next: BassNote[] = []
+    const touched: BassNote[] = []
+    for (const n of allNotes) {
+      const k = noteKey(n)
+      if (removed.has(k)) continue
+      const c = changed.get(k)
+      if (!c) next.push(n)
+      else touched.push(toSong(c))
+    }
+    for (const n of added) touched.push(toSong(n))
+    const result = normalizeNotes([...next, ...touched], songDuration)
+    setPending(result)
+    setSelected(touched.length ? new Set(touched.map(noteKey)) : new Set([...selected].filter((k) => !removed.has(k))))
+    void window.nota.songs.update(song.id, { notes: result }).catch((err: unknown) => {
+      setPending(null)
+      void attempt(() => Promise.reject(err), 'Edit notes')
+    })
+  }
+
+  const backToTranscription = () => {
+    setPending(null)
+    setSelected(new Set())
+    void attempt(() => window.nota.songs.update(song.id, { notes: null }), 'Back to transcription')
+  }
+
+  const pxPerSec = size.w / Math.max(1e-6, view.span)
+  const snapOn = (ev: { metaKey: boolean; altKey: boolean }) => !!grid && grid.beats.length > 1 && snapPref !== flipHeld(ev)
+  const snapTime = (t: number, ev: { metaKey: boolean; altKey: boolean }) => (snapOn(ev) ? snapToGrid(grid!.beats, t, pxPerSec, 32) : t)
+  /** The grid cell a time is in: a beat, or a quarter of one when zoomed in (as the snap). Null off the grid. */
+  const cellAt = (t: number) => {
+    const b = grid?.beats
+    if (!b || b.length < 2 || t < b[0] || t >= b[b.length - 1]) return null
+    let lo = 0
+    let hi = b.length - 1
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1
+      if (b[mid] <= t) lo = mid
+      else hi = mid
+    }
+    const beat = b[hi] - b[lo]
+    const step = beat * pxPerSec >= 32 ? beat / 4 : beat
+    return { start: b[lo] + Math.floor((t - b[lo]) / step) * step, step, beat }
+  }
+
+  /** Where things are on the roll, for a pointer at (x, y) inside it. */
+  const geometry = (r: DOMRect) => {
+    const low = P.center - r.height / P.rowH / 2
+    const timeAt = (x: number) => Math.max(0, Math.min(duration, view.start + (x / r.width) * view.span))
+    const xOf = (t: number) => ((t - view.start) / view.span) * r.width
+    /** The pitch row (as shown, after a key change) */
+    const rowAt = (y: number) => Math.floor(low + (r.height - y) / P.rowH)
+    const hit = (x: number, y: number): { note: ShownNote; edge: boolean } | null => {
+      const m = rowAt(y)
+      for (let i = notes.length - 1; i >= 0; i--) {
+        const n = notes[i]
+        if (n.pitch + shift !== m) continue
+        const x0 = xOf(n.start)
+        const x1 = Math.max(x0 + 2, xOf(n.end))
+        if (x < x0 - 1 || x > x1 + 1) continue
+        return { note: n, edge: x >= x1 - Math.min(8, Math.max(2, (x1 - x0) / 3)) }
+      }
+      return null
+    }
+    return { timeAt, rowAt, hit }
+  }
+
+  const onEditPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const el = e.currentTarget
+    const r = el.getBoundingClientRect()
+    const G = geometry(r)
+    const x0 = e.clientX - r.left
+    const y0 = e.clientY - r.top
+    const t0 = G.timeAt(x0)
+    const m0 = G.rowAt(y0)
+    const hit = G.hit(x0, y0)
+    const picked = notes.filter((n) => selected.has(n.key))
+    const g = newGesture()
+    const track = (move: (ev: PointerEvent, x: number, y: number) => void, done: (ev: PointerEvent) => void) => {
+      gesture.current = g
+      el.setPointerCapture(e.pointerId)
+      const onMove = (ev: PointerEvent) => move(ev, ev.clientX - r.left, ev.clientY - r.top)
+      const onUp = (ev: PointerEvent) => {
+        el.removeEventListener('pointermove', onMove)
+        el.removeEventListener('pointerup', onUp)
+        el.removeEventListener('pointercancel', onUp)
+        if (ev.type === 'pointerup') done(ev)
+        gesture.current = null
+      }
+      el.addEventListener('pointermove', onMove)
+      el.addEventListener('pointerup', onUp)
+      el.addEventListener('pointercancel', onUp)
+    }
+
+    // Right-click deletes, and a right-drag deletes every note it passes over.
+    if (e.button === 2) {
+      const sweep = (x: number, y: number) => {
+        const h = G.hit(x, y)
+        if (h) g.removed.add(h.note.key)
+      }
+      sweep(x0, y0)
+      track((_, x, y) => sweep(x, y), () => g.removed.size && commitNotes(new Map(), [], g.removed))
+      return
+    }
+    if (e.button !== 0) return
+
+    // Ctrl+drag selects the notes in a box (Shift adds to the selection); Ctrl+click picks one.
+    if (e.ctrlKey) {
+      let moved = false
+      track(
+        (_, x, y) => {
+          moved ||= Math.hypot(x - x0, y - y0) > 3
+          g.box = { t0, t1: G.timeAt(x), m0, m1: G.rowAt(y) }
+        },
+        (ev) => {
+          if (!moved || !g.box) {
+            const next = new Set(selected)
+            if (hit) next[next.has(hit.note.key) ? 'delete' : 'add'](hit.note.key)
+            setSelected(hit ? next : new Set())
+            return
+          }
+          const [ta, tb] = [Math.min(g.box.t0, g.box.t1), Math.max(g.box.t0, g.box.t1)]
+          const [ma, mb] = [Math.min(g.box.m0, g.box.m1), Math.max(g.box.m0, g.box.m1)]
+          const inBox = notes.filter((n) => n.end >= ta && n.start <= tb && n.pitch + shift >= ma && n.pitch + shift <= mb).map((n) => n.key)
+          setSelected(new Set(ev.shiftKey ? [...selected, ...inBox] : inBox))
+        }
+      )
+      return
+    }
+
+    // A note's end: resize it (and the rest of the selection by as much).
+    if (hit?.edge) {
+      const grabbed = hit.note
+      const targets = selected.has(grabbed.key) ? picked : [grabbed]
+      if (!selected.has(grabbed.key)) setSelected(new Set([grabbed.key]))
+      let d = 0
+      track(
+        (ev, x) => {
+          d = Math.max(grabbed.start + MIN_NOTE_SEC, snapTime(G.timeAt(x), ev)) - grabbed.end
+          g.changed = new Map(targets.map((n) => [n.key, { ...n, end: Math.max(n.start + MIN_NOTE_SEC, n.end + d) }]))
+        },
+        () => {
+          if (!d) return
+          lastLen.current = Math.max(MIN_NOTE_SEC, grabbed.end + d - grabbed.start)
+          commitNotes(g.changed, [], new Set())
+        }
+      )
+      return
+    }
+
+    // A note: move it (with the selection), or copy with Shift. Empty space: a new note, which can be dragged into place.
+    let grabbed: BassNote
+    let targets: ShownNote[]
+    let kind: 'move' | 'copy' | 'add'
+    if (hit) {
+      grabbed = hit.note
+      targets = selected.has(hit.note.key) ? picked : [hit.note]
+      if (!selected.has(hit.note.key)) setSelected(new Set([hit.note.key]))
+      kind = e.shiftKey ? 'copy' : 'move'
+      lastLen.current = hit.note.end - hit.note.start
+    } else {
+      const start = snapOn(e) ? (cellAt(t0)?.start ?? t0) : t0
+      const len = lastLen.current ?? cellAt(t0)?.beat ?? 0.25
+      grabbed = { start, end: start + len, pitch: Math.max(NOTE_PITCH_MIN, Math.min(NOTE_PITCH_MAX, m0 - shift)), velocity: NEW_NOTE_VELOCITY }
+      targets = [{ ...grabbed, key: '' }]
+      kind = 'add'
+      g.added = [grabbed]
+    }
+    const earliest = Math.min(...targets.map((n) => n.start))
+    const lowest = Math.min(...targets.map((n) => n.pitch))
+    const highest = Math.max(...targets.map((n) => n.pitch))
+    let dt = 0
+    let dp = 0
+    let dragged = false
+    track(
+      (ev, x, y) => {
+        dragged ||= Math.abs(x - x0) > 2 || G.rowAt(y) !== m0
+        if (!dragged) return
+        dt = Math.max(-earliest, snapTime(grabbed.start + (G.timeAt(x) - t0), ev) - grabbed.start)
+        dp = Math.max(NOTE_PITCH_MIN - lowest, Math.min(NOTE_PITCH_MAX - highest, G.rowAt(y) - m0))
+        const placed = targets.map((n) => ({ ...n, start: n.start + dt, end: n.end + dt, pitch: n.pitch + dp }))
+        if (kind === 'move') g.changed = new Map(placed.map((n) => [n.key, n]))
+        else g.added = placed
+      },
+      () => {
+        if (kind === 'add') commitNotes(new Map(), g.added, new Set())
+        else if (dragged && (dt || dp)) commitNotes(kind === 'move' ? g.changed : new Map(), kind === 'copy' ? g.added : [], new Set())
+      }
+    )
+  }
+
+  // Keys: E switches edit mode; in it, the selection moves with the arrows,
+  // Delete deletes, and copy, cut, paste and select all work on notes. Ahead of
+  // the app's own shortcuts (capture), only for what's handled here.
+  const onKeyRef = useRef<(e: KeyboardEvent) => boolean>(() => false)
+  onKeyRef.current = (e) => {
+    const mod = e.metaKey || e.ctrlKey
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key
+    if (k === 'e' && !mod && !e.altKey) {
+      onEditingChange?.(!editing)
+      return true
+    }
+    if (!editing) return false
+    const picked = notes.filter((n) => selected.has(n.key))
+    if (k === 'Escape') {
+      if (selected.size) setSelected(new Set())
+      else onEditingChange?.(false)
+      return true
+    }
+    if (mod && k === 'a') {
+      setSelected(new Set(notes.map((n) => n.key)))
+      return true
+    }
+    if (mod && k === 'v') {
+      if (!clipboard) return false
+      const pos = getPosition()
+      const at = grid && snapPref ? (cellAt(pos)?.start ?? pos) : pos
+      commitNotes(new Map(), pasteNotes(clipboard, at), new Set())
+      return true
+    }
+    if (!picked.length) return false
+    const keys = new Set(picked.map((n) => n.key))
+    if ((k === 'Delete' || k === 'Backspace') && !mod) {
+      commitNotes(new Map(), [], keys)
+      return true
+    }
+    if (mod && (k === 'c' || k === 'x')) {
+      clipboard = copyNotes(picked)
+      if (k === 'x') commitNotes(new Map(), [], keys)
+      return true
+    }
+    if (mod || e.altKey) return false
+    const moveBy = (dt: number, dp: number) => commitNotes(new Map(picked.map((n) => [n.key, { ...n, start: n.start + dt, end: n.end + dt, pitch: n.pitch + dp }])), [], new Set())
+    if (k === 'ArrowUp' || k === 'ArrowDown') {
+      const want = (k === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 12 : 1)
+      const lowest = Math.min(...picked.map((n) => n.pitch))
+      const highest = Math.max(...picked.map((n) => n.pitch))
+      moveBy(0, Math.max(NOTE_PITCH_MIN - lowest, Math.min(NOTE_PITCH_MAX - highest, want)))
+      return true
+    }
+    if (k === 'ArrowLeft' || k === 'ArrowRight') {
+      const earliest = Math.min(...picked.map((n) => n.start))
+      const cell = cellAt(earliest)
+      const step = (e.shiftKey ? cell?.beat : cell?.step) ?? 0.05
+      moveBy(Math.max(-earliest, k === 'ArrowLeft' ? -step : step), 0)
+      return true
+    }
+    return false
+  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]')) return
+      if (onKeyRef.current(e)) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
+
+  /** The ruler seeks (and in edit mode it's the only place that does). */
+  const onRulerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    const el = e.currentTarget
+    const seekTo = (ev: { clientX: number; metaKey: boolean; altKey: boolean }) => {
+      const r = el.getBoundingClientRect()
+      const t = Math.max(0, Math.min(duration, view.start + ((ev.clientX - r.left) / r.width) * view.span))
+      onSeek(grid && snapPref !== flipHeld(ev) ? snapToGrid(grid.beats, t, pxPerSec) : t)
+    }
+    seekTo(e)
+    el.setPointerCapture(e.pointerId)
+    const up = () => {
+      el.removeEventListener('pointermove', seekTo)
+      el.removeEventListener('pointerup', up)
+    }
+    el.addEventListener('pointermove', seekTo)
+    el.addEventListener('pointerup', up)
+  }
+
+  const message = song.editedNotes
+    ? null
+    : !state || state.status === 'running'
       ? state?.status === 'running' && state.progress > 0
         ? `Writing out the bass notes… ${Math.round(state.progress * 100)}%`
         : 'Writing out the bass notes… starting'
@@ -492,7 +837,8 @@ export function NotesView(props: Props) {
         ref={roll}
         className="notes-roll"
         style={{ left: KEYS_W, width: size.w, height: size.h }}
-        onDoubleClick={() => rawLoop && props.onLoopRemove?.()}
+        data-editing={editing || undefined}
+        onDoubleClick={() => !editing && rawLoop && props.onLoopRemove?.()}
         onPointerDown={(e) => {
           // As on the waveform: click or drag moves the playhead (snapped; ⌘ does the
           // opposite), Ctrl+drag (or a plain drag, per Settings) makes a loop, and the
@@ -502,6 +848,7 @@ export function NotesView(props: Props) {
             setPitch(fitAxis(size.h))
             return
           }
+          if (editing) return onEditPointerDown(e)
           if (e.button !== 0) return
           const el = e.currentTarget
           const r0 = el.getBoundingClientRect()
@@ -553,15 +900,22 @@ export function NotesView(props: Props) {
         }}
         onPointerMove={(e) => {
           // Show the resize cursor over a loop handle, the loop cursor while Ctrl is held.
+          // Editing: resize over a note's end, move over a note, add elsewhere.
           const el = e.currentTarget
           const r = el.getBoundingClientRect()
+          if (editing) {
+            if (e.buttons) return
+            const h = geometry(r).hit(e.clientX - r.left, e.clientY - r.top)
+            el.style.cursor = h?.edge ? 'ew-resize' : h ? 'move' : e.ctrlKey ? 'crosshair' : '' // '': the note cursor (styles.css)
+            return
+          }
           const xOf = (t: number) => r.left + ((t - view.start) / view.span) * r.width
           const onHandle = !!loop && e.clientY - r.top <= 14 && (Math.abs(e.clientX - xOf(loop.start) - 4) < 8 || Math.abs(e.clientX - xOf(loop.end) + 4) < 8)
           el.style.cursor = onHandle ? 'ew-resize' : e.ctrlKey ? 'col-resize' : ''
         }}
         onContextMenu={(e) => e.preventDefault()}
       />
-      <div className="notes-ruler" style={{ left: KEYS_W }}>
+      <div className="notes-ruler" style={{ left: KEYS_W }} onPointerDown={onRulerPointerDown}>
         {ticks.map((t) => (
           <span key={t.label} style={{ left: t.x }}>
             {t.label}
@@ -589,6 +943,16 @@ export function NotesView(props: Props) {
                 Clear
               </Button>
             </>
+          )}
+        </div>
+      )}
+      {editing && (
+        <div className="notes-edit-bar">
+          <Button size="sm" variant="ghost" icon="keyboard" title="How editing works (Shortcuts)" aria-label="How editing works" onClick={showNoteEditKeys} />
+          {song.editedNotes && (
+            <Button size="sm" variant="ghost" icon="reset" onClick={backToTranscription}>
+              Back to transcription
+            </Button>
           )}
         </div>
       )}

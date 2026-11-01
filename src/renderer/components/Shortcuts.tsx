@@ -1,5 +1,5 @@
 import type { Preferences } from '../../shared/types'
-import { useStore } from '../state/store'
+import { setState, useStore } from '../state/store'
 import { closeSidePane, toggleSidePane, useEscToClose } from './Settings'
 import { Button, Icon } from './ui'
 import { flipKey, optKey, shortcut, withShift } from '../platform'
@@ -39,6 +39,24 @@ function mouseShortcuts(p: Preferences): [string, string][] {
   ]
 }
 
+function noteEditShortcuts(p: Preferences): [string, string][] {
+  return [
+    ['E', 'Edit mode on / off'],
+    ['Click', 'Add a note (as long as the last one you touched)'],
+    ['Drag a note', `Move it, with the selection (${withShift()} copies)`],
+    ['Drag its end', 'Make it longer or shorter'],
+    ['Right-click / drag', 'Delete notes'],
+    ['Ctrl + drag', `Select notes (${withShift()} adds)`],
+    [`Hold ${flipKey}`, p.snapToGrid ? 'No snapping' : 'Snap to the beat grid'],
+    ['↑ ↓', `Move the selection a semitone (${withShift()} for an octave)`],
+    ['← →', `Move the selection a step (${withShift()} for a beat)`],
+    ['Backspace', 'Delete the selection'],
+    [`${shortcut('C')} ${shortcut('X')} ${shortcut('V')}`, 'Copy · Cut · Paste at the playhead'],
+    [shortcut('A'), 'Select all notes'],
+    ['Click the ruler', 'Move the playhead']
+  ]
+}
+
 const SLIDERS: [string, string][] = [
   ['Drag the tag', `Change the value (${withShift()} for fine steps)`],
   ['Click + type', 'Type a value, then Enter (Esc cancels)'],
@@ -49,9 +67,22 @@ const SLIDERS: [string, string][] = [
 
 export const toggleKeys = () => toggleSidePane('keys')
 
-function Group({ title, rows }: { title: string; rows: [string, string][] }) {
+/** Opens Shortcuts at the note-editing keys (from the Notes view's edit mode). */
+export function showNoteEditKeys() {
+  setState({ sidePane: 'keys' })
+  // Once the pane is there (a few frames), scroll to them.
+  let frames = 0
+  const scroll = () => {
+    const group = document.getElementById('keys-editing-notes')
+    if (group) group.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    else if (++frames < 30) requestAnimationFrame(scroll)
+  }
+  requestAnimationFrame(scroll)
+}
+
+function Group({ title, rows, id }: { title: string; rows: [string, string][]; id?: string }) {
   return (
-    <section className="set-group">
+    <section className="set-group" id={id}>
       <h4>{title}</h4>
       {rows.map(([k, d]) => (
         <div key={k} className="shortcut-row">
@@ -78,6 +109,7 @@ export function ShortcutsPanel() {
         <Group title="Keyboard" rows={SHORTCUTS} />
         <Group title="Sliders" rows={SLIDERS} />
         <Group title="Waveform" rows={mouseShortcuts(prefs)} />
+        <Group title="Editing notes" rows={noteEditShortcuts(prefs)} id="keys-editing-notes" />
       </div>
     </aside>
   )
