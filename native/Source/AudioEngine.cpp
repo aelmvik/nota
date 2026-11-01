@@ -168,6 +168,25 @@ namespace
     }
 
     /**
+     * JACK's channel names are its port names, and PipeWire names an interface's
+     * ports after its profile's speaker layout (capture_FL, capture_FR, capture_RL …
+     * on an 8-input interface in "Analog Surround 7.1"), then lists monitor ports
+     * (what its outputs play) as inputs too. Number them as the hardware does, and
+     * leave out the monitors when they come last, so the indexes JUCE connects by
+     * stay the same.
+     */
+    juce::StringArray jackChannelNames (const juce::StringArray& names, const juce::String& label)
+    {
+        int count = names.size();
+        while (count > 0 && names[count - 1].startsWith ("monitor_"))
+            --count;
+        juce::StringArray out;
+        for (int i = 0; i < count; ++i)
+            out.add (names[i].startsWith ("monitor_") ? names[i] : label + " " + juce::String (i + 1));
+        return out;
+    }
+
+    /**
      * ALSA lists each sound card several times: surround layouts, dmix and dsnoop,
      * and the raw hardware device ("card, device; description"). Keep one entry per
      * card and device, the one that converts formats, and always the one in use.
@@ -175,12 +194,13 @@ namespace
      */
     juce::StringArray listedDevices (const juce::String& typeName, const juce::StringArray& names, const juce::String& current)
     {
-        // JACK lists every client, PipeWire's MIDI bridges too: they have no audio.
+        // JACK lists every client: PipeWire's MIDI bridges (no audio) and Nøta's own
+        // engines too ("Nota", or "Nota-<id>" beside another copy) aren't devices.
         if (typeName == "JACK")
         {
             juce::StringArray audio;
             for (auto& n : names)
-                if (n == current || ! n.containsIgnoreCase ("midi"))
+                if (n == current || ! (n.containsIgnoreCase ("midi") || n == "Nota" || n.startsWith ("Nota-")))
                     audio.add (n);
             return audio;
         }
@@ -398,6 +418,10 @@ juce::var AudioEngine::getDeviceState()
         if (inputOpen)
         {
             lastInputChannelNames = device->getInputChannelNames();
+           #if JUCE_LINUX
+            if (deviceManager.getCurrentAudioDeviceType() == "JACK")
+                lastInputChannelNames = jackChannelNames (lastInputChannelNames, "Input");
+           #endif
             lastInputChannelDevice = wantedInput;
         }
         else if (lastInputChannelDevice != wantedInput)
@@ -408,6 +432,11 @@ juce::var AudioEngine::getDeviceState()
             lastInputChannelDevice = wantedInput;
         }
         state->setProperty ("inputChannelNames", toVarArray (lastInputChannelNames));
+       #if JUCE_LINUX
+        if (deviceManager.getCurrentAudioDeviceType() == "JACK")
+            state->setProperty ("outputChannelNames", toVarArray (jackChannelNames (device->getOutputChannelNames(), "Output")));
+        else
+       #endif
         state->setProperty ("outputChannelNames", toVarArray (device->getOutputChannelNames()));
 
         // What the monitored bass passes through: its own chain, plus the output chain when it's included.

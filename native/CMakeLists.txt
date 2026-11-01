@@ -79,7 +79,8 @@ endif()
 # Linux: JACK beside ALSA, the low-latency route (PipeWire's JACK on desktops).
 # JUCE loads libjack at runtime, so the engine still starts without it.
 if(UNIX AND NOT APPLE)
-    target_compile_definitions(NotaEngine PRIVATE JUCE_JACK=1)
+    # The engine's JACK client is "Nota" (in patchbays, and so the device lists can leave it out).
+    target_compile_definitions(NotaEngine PRIVATE JUCE_JACK=1 JUCE_JACK_CLIENT_NAME="Nota")
 endif()
 
 # MSVC reads sources in the system code page unless told otherwise; ours are UTF-8.

@@ -29,11 +29,15 @@ export const revealLabel = isMac ? 'Show in Finder' : window.nota.platform === '
  * A device as it reads here. ALSA's names are "card, device; description", and
  * the system default reads "Default ALSA Output (currently PipeWire Media Server)"
  * for the input too: show "HDA Intel PCH, Analog" (the card and device) and "System default
- * (PipeWire Media Server)". The engine's name is still what's sent back.
+ * (PipeWire Media Server)". Under JACK, PipeWire's names end in the card's profile
+ * ("M-Track Eight Analog Surround 7.1"): show "M-Track Eight". The engine's name is
+ * still what's sent back.
  */
 export function deviceLabel(name: string): string {
   if (window.nota.platform !== 'linux') return name
   const def = /^Default ALSA (?:Output|Input)(?: \(currently (.+)\))?$/.exec(name)
   if (def) return def[1] ? `System default (${def[1]})` : 'System default'
-  return name.includes(';') ? name.slice(0, name.indexOf(';')) : name
+  if (name.includes(';')) return name.slice(0, name.indexOf(';'))
+  // JACK through PipeWire adds the profile: "M-Track Eight Analog Surround 7.1", "Built-in Audio Digital Stereo (HDMI)".
+  return name.replace(/ (?:Analog|Digital) (?:Mono|Stereo|Surround \d\.\d)(?= \(|$)/, '')
 }
