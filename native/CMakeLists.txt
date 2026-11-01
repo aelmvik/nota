@@ -63,9 +63,10 @@ if(APPLE)
     target_link_libraries(NotaEngine PRIVATE "-framework Accelerate")
 endif()
 
-# Windows: what kind of device each audio endpoint is (microphone, speakers, Bluetooth).
+# Windows: what kind of device each audio endpoint is (microphone, speakers, Bluetooth),
+# and bringing plugin windows in front of Nøta (JUCE does that only on the Mac).
 if(WIN32)
-    target_sources(NotaEngine PRIVATE Source/WindowsDevices.cpp)
+    target_sources(NotaEngine PRIVATE Source/WindowsDevices.cpp Source/WindowsForeground.cpp)
     target_link_libraries(NotaEngine PRIVATE ole32)
 endif()
 
