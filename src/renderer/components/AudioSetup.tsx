@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import type { DeviceRequest } from '../../shared/api'
 import type { EngineDeviceState } from '../../shared/types'
-import { attempt, setState, useStore } from '../state/store'
+import { attempt, setState, toast, useStore } from '../state/store'
 import { Button, Icon, Select } from './ui'
 import { deviceLabel } from '../platform'
 
@@ -103,6 +103,20 @@ export function AudioSection() {
   // Linux: PipeWire runs a multichannel interface as surround sound by default, and
   // the engine then names its inputs after speakers, in an order that isn't the hardware's.
   const surround = d.deviceType === 'JACK' && (d.inputChannelNames?.length ?? 0) > 2 && !!d.inputChannelNames?.some((n) => SPEAKER_NAMES.has(n))
+  // Linux without PipeWire's JACK support: JACK, the low-latency route, finds nothing.
+  const jackCommand = 'sudo apt install pipewire-jack'
+  const jackField = window.nota.jackMissing && (
+    <div className="set-row">
+      <div className="set-help">
+        For low latency (to hear your bass live), Nøta uses JACK, which needs PipeWire’s JACK support. On Debian or Ubuntu, install it with <code>{jackCommand}</code>, then restart Nøta.
+      </div>
+      <div className="set-buttons">
+        <Button size="sm" onClick={() => void navigator.clipboard.writeText(jackCommand).then(() => toast('Copied', 'info', 1400))}>
+          Copy command
+        </Button>
+      </div>
+    </div>
+  )
   const surroundField = surround && (
     <div className="set-row">
       <div className="set-help">
@@ -123,6 +137,7 @@ export function AudioSection() {
           <Select value={d.deviceType ?? null} options={driverTypes.map((t) => ({ value: t, label: DRIVER_LABELS[t] ?? t }))} onChange={(deviceType) => void setDevice({ deviceType })} />
         </Field>
       )}
+      {jackField}
       {oneDevice ? (
         <>
           <Field label="Interface">

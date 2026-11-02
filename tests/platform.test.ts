@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { bulkDataDir, defaultVst3Dirs, engineEnv, engineExecutable, looseVst3Plugins, torchBackendArgs, exe, findOnDisk, portableRelative, replaceFile, venvPython } from '../src/main/platform'
+import { bulkDataDir, defaultVst3Dirs, engineEnv, pipewireJackDir, engineExecutable, looseVst3Plugins, torchBackendArgs, exe, findOnDisk, portableRelative, replaceFile, venvPython } from '../src/main/platform'
 
 // macOS answers must stay exactly what the app has always used; the others are for a port.
 describe('platform paths', () => {
@@ -84,6 +84,13 @@ describe('platform paths', () => {
     expect(engineEnv('linux', { LD_LIBRARY_PATH: dir }, 'x64', has).LD_LIBRARY_PATH).toBe(dir)
     expect(engineEnv('linux', {}, 'x64', () => false).LD_LIBRARY_PATH).toBeUndefined()
     expect(engineEnv('darwin', {}, 'arm64', () => true).LD_LIBRARY_PATH).toBeUndefined()
+  })
+
+  it('finds PipeWire’s JACK library, or says it’s missing', () => {
+    const dir = '/usr/lib/x86_64-linux-gnu/pipewire-0.3/jack'
+    expect(pipewireJackDir('x64', (p) => p === `${dir}/libjack.so.0`)).toBe(dir)
+    expect(pipewireJackDir('x64', () => false)).toBeNull()
+    expect(pipewireJackDir('ia32', () => true)).toBeNull()
   })
 
   it('installs PyTorch’s CPU build on Linux only', () => {

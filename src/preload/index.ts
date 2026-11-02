@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { NotaApi } from '../shared/api'
+import { pipewireJackDir } from '../main/platform'
 import type { ImportResult } from '../shared/types'
 import type { UpdateInfo } from '../shared/updates'
 
@@ -130,7 +131,8 @@ const api: NotaApi = {
       offRedo()
     }
   },
-  platform: process.platform
+  platform: process.platform,
+  jackMissing: process.platform === 'linux' && !pipewireJackDir()
 }
 
 contextBridge.exposeInMainWorld('nota', api)

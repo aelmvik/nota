@@ -214,6 +214,8 @@ export interface NotaApi {
   /** Edit > Undo / Redo (⌘Z, ⇧⌘Z) */
   onMenuUndo(cb: (direction: 'undo' | 'redo') => void): () => void
   platform: string
+  /** Linux: PipeWire's JACK support (pipewire-jack) isn't installed, so JACK finds no devices */
+  jackMissing: boolean
 }
 
 declare global {

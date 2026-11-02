@@ -394,7 +394,8 @@ export async function createFakeNota(base: string): Promise<NotaApi> {
     onMenuImport: () => () => {},
     onImportResult: () => () => {},
     onMenuUndo: () => () => {},
-    platform: 'darwin'
+    platform: 'darwin',
+    jackMissing: false
   }
   return api
 }
