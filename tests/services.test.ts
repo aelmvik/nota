@@ -212,6 +212,33 @@ describe.skipIf(!hasFfmpeg)('separation queue with asset cache', () => {
   })
 })
 
+describe('project service: saving', () => {
+  it('writes an edit made while a save was running, when the project closes straight after', async () => {
+    const root = join(dir, 'save-race')
+    let slow = false
+    const svc = new ProjectService({
+      cache: new AssetCache(join(root, 'cache')),
+      provider: new FakeProvider(),
+      settings: new SettingsStore(join(root, 'settings.json')),
+      projectsDir: join(root, 'projects'),
+      autosaveDelayMs: 10_000,
+      // A save that takes a while (as capturing plugin states can), so the edit lands during it.
+      beforeSave: async (p) => {
+        if (slow) await new Promise((r) => setTimeout(r, 100))
+        return p
+      }
+    })
+    await svc.create('Before')
+    slow = true
+    const running = svc.saveNow()
+    svc.rename('After')
+    const path = svc.filePath!
+    await svc.close()
+    await running
+    expect(JSON.parse(readFileSync(join(path, 'project.json'), 'utf8')).name).toBe('After')
+  })
+})
+
 describe.skipIf(!hasFfmpeg)('project service: import, persist, reopen', () => {
   it('imports real audio, separates it, saves and restores everything', async () => {
     const root = join(dir, 'svc')

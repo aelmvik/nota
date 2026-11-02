@@ -72,7 +72,6 @@ export class ProjectService extends EventEmitter {
   private lastSavedAt: string | null = null
   private saveTimer: NodeJS.Timeout | null = null
   private saving: Promise<void> | null = null
-  private saveAgain = false
   readonly queue: SeparationQueue
   readonly analysis: AnalysisService | null
 
@@ -201,20 +200,17 @@ export class ProjectService extends EventEmitter {
     this.saveTimer = setTimeout(() => void this.saveNow(), this.opts.autosaveDelayMs ?? 800)
   }
 
+  /**
+   * Saves the project as it is now. A save already running holds an older
+   * state, so this waits for it and then saves again: closing or quitting right
+   * after an edit then still writes that edit (it used to return the older save's
+   * promise, and the project was closed before the newer one ran).
+   */
   async saveNow(): Promise<void> {
     if (this.saveTimer) clearTimeout(this.saveTimer)
     this.saveTimer = null
-    if (this.saving) {
-      this.saveAgain = true
-      return this.saving
-    }
-    this.saving = this.doSave().finally(() => {
-      this.saving = null
-      if (this.saveAgain) {
-        this.saveAgain = false
-        void this.saveNow()
-      }
-    })
+    while (this.saving) await this.saving
+    this.saving = this.doSave().finally(() => (this.saving = null))
     return this.saving
   }
 
