@@ -267,6 +267,7 @@ export async function createFakeNota(base: string): Promise<NotaApi> {
         return notes ? { status: 'ready', notes } : { status: 'unavailable', error: 'No notes for this song in the demo' }
       },
       onNotesState: (cb) => on('notes', cb),
+      onExportProgress: () => () => {},
       take: () => Promise.resolve({ status: 'none' }),
       recordTake: notInDemo,
       stopTake: () => Promise.resolve(),
@@ -387,6 +388,8 @@ export async function createFakeNota(base: string): Promise<NotaApi> {
       update: () => Promise.resolve(null),
       checkUpdates: () => Promise.resolve({ status: 'current' }),
       openUpdate: () => Promise.resolve(),
+      installUpdate: () => Promise.resolve(),
+      onUpdateProgress: () => () => {},
       onUpdate: () => () => {}
     },
     onMenuSettings: () => () => {},

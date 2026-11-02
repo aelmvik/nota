@@ -699,7 +699,7 @@ export function Waveform(props: Props) {
 }
 
 function Ruler({ view, width, mode, grid, label }: { view: View; width: number; mode: 'time' | 'bars'; grid: GridLike | null; label: (t: number, tenths: boolean) => string }) {
-  const ticks: { x: number; label: string }[] = []
+  const ticks: { t: number; x: number; label: string }[] = []
   if (width > 0) {
     const pxPerSec = width / view.span
     if (mode === 'bars' && grid && grid.beats.length > 1) {
@@ -711,20 +711,21 @@ function Ruler({ view, width, mode, grid, label }: { view: View; width: number; 
         const t = grid.beats[i]
         if (t < view.start - (every * barPx) / pxPerSec || t > view.start + view.span) continue
         if ((bar - 1) % every !== 0) continue
-        ticks.push({ x: (t - view.start) * pxPerSec, label: String(bar) })
+        ticks.push({ t, x: (t - view.start) * pxPerSec, label: String(bar) })
       }
     } else {
       const step = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120].find((s) => s * pxPerSec >= 56) ?? 300
       // From one step before the view: a label whose tick has scrolled out on the left still shows its end.
       for (let t = Math.max(0, Math.ceil(view.start / step) * step - step); t <= view.start + view.span; t += step)
-        ticks.push({ x: (t - view.start) * pxPerSec, label: label(t, step < 1) })
+        ticks.push({ t, x: (t - view.start) * pxPerSec, label: label(t, step < 1) })
     }
   }
   return (
     <div className="ruler">
       {ticks.map((t) => (
         // Whole pixels, like the grid lines in the waveform, so labels and lines move together.
-        <span key={t.label} style={{ left: Math.round(t.x) }}>
+        // Keyed by time: labels can repeat (across a cut), and a repeated key leaves stale labels behind.
+        <span key={t.t} style={{ left: Math.round(t.x) }}>
           {t.label}
         </span>
       ))}

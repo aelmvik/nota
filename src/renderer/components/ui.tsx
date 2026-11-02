@@ -627,17 +627,53 @@ export function Popover({
   className?: string
 }) {
   const [open, setOpen] = useState(false)
-  const ref = useDismiss(open, () => setOpen(false))
+  const anchor = useRef<HTMLDivElement>(null)
   const pop = useRef<HTMLDivElement>(null)
-  useKeepInWindow(open, pop)
+  // Drawn over the whole window (a portal, placed from its button), so a row that
+  // clips what overflows it (the transport's loop area in a narrow window) can't hide it.
+  const [place, setPlace] = useState<React.CSSProperties | null>(null)
+  useLayoutEffect(() => {
+    if (!open) return setPlace(null)
+    const update = () => {
+      const r = anchor.current?.getBoundingClientRect()
+      if (!r) return
+      const x = align === 'right' ? { right: window.innerWidth - r.right } : { left: align === 'center' ? r.left + r.width / 2 : r.left }
+      setPlace({ position: 'fixed', zIndex: 250, top: 'auto', bottom: window.innerHeight - r.top + 8, ...x })
+    }
+    update()
+    window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+    }
+  }, [open, align])
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node
+      if (!anchor.current?.contains(t) && !pop.current?.contains(t)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    window.addEventListener('pointerdown', onDown, true)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+  useKeepInWindow(open && !!place, pop)
   return (
-    <div className="menu-wrap" ref={ref}>
+    <div className="menu-wrap" ref={anchor}>
       {trigger(open, () => setOpen((o) => !o))}
-      {open && (
-        <div ref={pop} className={`popover popover-${align} ${className}`}>
-          {children}
-        </div>
-      )}
+      {open &&
+        place &&
+        createPortal(
+          <div ref={pop} className={`popover popover-${align} ${className}`} style={place}>
+            {children}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

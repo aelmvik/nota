@@ -518,10 +518,10 @@ export function NotesView(props: Props) {
     if (!size.w) return []
     const steps = [0.5, 1, 2, 5, 10, 15, 30, 60, 120]
     const step = steps.find((s) => (s / view.span) * size.w >= 70) ?? 300
-    const out: { x: number; label: string }[] = []
+    const out: { t: number; x: number; label: string }[] = []
     // From one step before the view: a label whose tick has scrolled out on the left still shows its end.
     for (let t = Math.max(0, Math.ceil(view.start / step) * step - step); t <= view.start + view.span; t += step)
-      out.push({ x: Math.round(((t - view.start) / view.span) * size.w), label: formatPosition(cm.toSong(t), ruler, songGrid) })
+      out.push({ t, x: Math.round(((t - view.start) / view.span) * size.w), label: formatPosition(cm.toSong(t), ruler, songGrid) })
     return out
   }, [view, size.w, ruler, songGrid, cm])
 
@@ -917,7 +917,8 @@ export function NotesView(props: Props) {
       />
       <div className="notes-ruler" style={{ left: KEYS_W }} onPointerDown={onRulerPointerDown}>
         {ticks.map((t) => (
-          <span key={t.label} style={{ left: t.x }}>
+          // Keyed by time: two ticks can share a label (bars across a cut), and a repeated key leaves stale labels behind.
+          <span key={t.t} style={{ left: t.x }}>
             {t.label}
           </span>
         ))}

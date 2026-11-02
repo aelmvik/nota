@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { newerRelease, type UpdateCheck, type UpdateInfo } from '../shared/updates'
+import { newerRelease, type UpdateCheck, type UpdateInfo, type UpdateTarget } from '../shared/updates'
 import type { SettingsStore } from './projectStore'
 
 /** Where Nøta's releases are published. */
@@ -17,7 +17,9 @@ export class UpdateChecker extends EventEmitter {
 
   constructor(
     private readonly currentVersion: string,
-    private readonly settings: SettingsStore
+    private readonly settings: SettingsStore,
+    /** Which release file this copy installs from (null: open the release page instead) */
+    private readonly target: UpdateTarget | null = null
   ) {
     super()
   }
@@ -45,7 +47,7 @@ export class UpdateChecker extends EventEmitter {
       // No release published yet.
       if (res.status === 404) return this.set(null)
       if (!res.ok) throw new Error(`GitHub answered ${res.status}`)
-      return this.set(newerRelease(await res.json(), this.currentVersion))
+      return this.set(newerRelease(await res.json(), this.currentVersion, this.target))
     } catch (err) {
       return { status: 'failed', error: err instanceof Error ? err.message : String(err) }
     }

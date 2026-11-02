@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { NotaApi } from '../shared/api'
 import { pipewireJackDir } from '../main/platform'
 import type { ImportResult } from '../shared/types'
-import type { UpdateInfo } from '../shared/updates'
+import type { UpdateInfo, UpdateProgress } from '../shared/updates'
 
 const invoke = (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args)
 
@@ -37,6 +37,7 @@ const api: NotaApi = {
     export: (id, kind) => invoke('songs:export', id, kind),
     notes: (id) => invoke('songs:notes', id),
     onNotesState: (cb) => subscribe('songs:notesState', cb),
+    onExportProgress: (cb) => subscribe('songs:exportProgress', cb),
     take: (id) => invoke('songs:take', id),
     recordTake: (id) => invoke('songs:recordTake', id),
     stopTake: () => invoke('songs:stopTake'),
@@ -117,7 +118,9 @@ const api: NotaApi = {
     update: () => invoke('app:update'),
     checkUpdates: () => invoke('app:checkUpdates'),
     openUpdate: () => invoke('app:openUpdate'),
-    onUpdate: (cb) => subscribe<UpdateInfo | null>('app:update', cb)
+    installUpdate: () => invoke('app:installUpdate'),
+    onUpdate: (cb) => subscribe<UpdateInfo | null>('app:update', cb),
+    onUpdateProgress: (cb) => subscribe<UpdateProgress>('app:updateProgress', cb)
   },
   onMenuSettings: (cb) => subscribe('menu:settings', () => cb()),
   pathForFile: (file) => webUtils.getPathForFile(file),

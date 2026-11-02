@@ -143,11 +143,36 @@ export async function transcodeToFlac(input: string, output: string): Promise<vo
   await replaceFile(partial, output)
 }
 
-/** Write audio for use in other software: WAV (24-bit), FLAC or MP3 (VBR ~190 kbit/s), by the output's extension. */
-export async function exportAudio(input: string, output: string): Promise<void> {
+/**
+ * Write audio for use in other software: WAV (24-bit), FLAC or MP3 (VBR ~190 kbit/s), by the output's extension.
+ * With `durationSec`, `onProgress` hears how far along it is (0..1), from FFmpeg's own progress report.
+ */
+export async function exportAudio(input: string, output: string, durationSec?: number, onProgress?: (progress: number) => void): Promise<void> {
   const ext = extname(output).toLowerCase()
   const codec = ext === '.mp3' ? ['-c:a', 'libmp3lame', '-q:a', '2'] : ext === '.flac' ? ['-c:a', 'flac'] : ['-c:a', 'pcm_s24le']
-  await run(requireTool('ffmpeg'), ['-v', 'error', '-nostdin', '-y', '-i', input, '-vn', '-map_metadata', '-1', ...codec, output])
+  const args = ['-v', 'error', '-nostdin', '-y', '-i', input, '-vn', '-map_metadata', '-1', ...codec]
+  if (!durationSec || !onProgress) {
+    await run(requireTool('ffmpeg'), [...args, output])
+    return
+  }
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(requireTool('ffmpeg'), [...args, '-progress', 'pipe:1', '-stats_period', '0.1', '-nostats', output], { stdio: ['ignore', 'pipe', 'pipe'] })
+    let err = ''
+    let buffered = ''
+    child.stdout.on('data', (d: Buffer) => {
+      buffered += d.toString()
+      const lines = buffered.split('\n')
+      buffered = lines.pop() ?? ''
+      for (const line of lines) {
+        // out_time_us is the position written so far (out_time_ms is the same, misnamed).
+        const m = /^out_time_us=(\d+)/.exec(line)
+        if (m) onProgress(Math.min(1, Number(m[1]) / 1e6 / durationSec))
+      }
+    })
+    child.stderr.on('data', (d: Buffer) => (err += d.toString()))
+    child.on('error', reject)
+    child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(err.trim().split('\n').pop() || `ffmpeg exited with code ${code}`))))
+  })
 }
 
 export const WAVE_PER_SECOND = 1000

@@ -365,9 +365,14 @@ function UpdatesSection({ p }: { p: Preferences }) {
       <Row label={`Nøta ${version}`} help={update ? `Nøta ${update.version} is out.` : (result ?? undefined)}>
         <div className="set-buttons">
           {update ? (
-            <Button size="sm" icon="download" onClick={() => void window.nota.app.openUpdate()}>
-              Download {update.version}…
-            </Button>
+            <>
+              <Button size="sm" icon="download" onClick={() => void window.nota.app.installUpdate()}>
+                {update.asset ? `Update to ${update.version}` : `Download ${update.version}…`}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => void window.nota.app.openUpdate()}>
+                What’s new
+              </Button>
+            </>
           ) : (
             <Button size="sm" icon="refresh" disabled={checking} onClick={() => void check()}>
               {checking ? 'Checking…' : 'Check now'}

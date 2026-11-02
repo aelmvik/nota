@@ -9,7 +9,7 @@ import { openAudioSettings } from './AudioSetup'
 import { toggleKeys } from './Shortcuts'
 import { Button, Icon, InlineEdit, Popover, Wordmark, type IconName } from './ui'
 import { deviceLabel, shortcut } from '../platform'
-import { useUpdate } from '../updates'
+import { updateStatus, useUpdate, useUpdateProgress } from '../updates'
 
 function SaveStatus() {
   const snap = useStore((s) => s.snapshot)
@@ -261,6 +261,17 @@ function IoBars() {
 }
 
 /** Dark status bar: project state on the left, audio device and live i/o levels on the right. */
+/** "Update to Nøta 1.2" in the status bar, then how the download and install are going. */
+function UpdateButton({ update }: { update: NonNullable<ReturnType<typeof useUpdate>> }) {
+  const status = updateStatus(update, useUpdateProgress())
+  return (
+    <button type="button" className="statusbar-update" title={status.title} disabled={!status.onClick} onClick={status.onClick}>
+      {status.fraction !== undefined && <span className="statusbar-update-fill" style={{ width: `${Math.round(status.fraction * 100)}%` }} />}
+      <span>{status.text}</span>
+    </button>
+  )
+}
+
 export function StatusBar() {
   const engine = useStore((s) => s.engine)
   const separation = useStore((s) => s.separation)
@@ -273,11 +284,7 @@ export function StatusBar() {
       <span className="statusbar-sep" />
       <ProcessingSummary />
       {separation && !separation.available && <SeparationSetup />}
-      {update && (
-        <button type="button" className="statusbar-update" title="Open the download page" onClick={() => void window.nota.app.openUpdate()}>
-          Nøta {update.version} is out
-        </button>
-      )}
+      {update && <UpdateButton update={update} />}
       <div className="spacer" />
       {d ? (
         <>

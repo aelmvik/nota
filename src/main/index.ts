@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, type MenuItemConstructorOptions } from 'electron'
 import { existsSync } from 'node:fs'
 import { extname, join } from 'node:path'
+import { CutMap } from '../shared/cuts'
 import { findSong } from '../shared/project'
 import type { EffectChain, PluginInfo, SongPatch } from '../shared/types'
 import type { DeviceRequest, TrackKind, TransportCommand, TransportLoad } from '../shared/api'
@@ -11,7 +12,9 @@ import { EngineHost, resolveEngineBinary } from './engineHost'
 import { bulkDataDir, computerName, exe, trashName, venvPython } from './platform'
 import { TakeService } from './takes'
 import { UpdateChecker } from './updates'
+import { downloadAsset, installUpdate, updateTarget } from './updateInstaller'
 import type { TakeState } from '../shared/takes'
+import type { UpdateProgress } from '../shared/updates'
 import { exportAudio, getTools, IMPORTABLE, setBundledToolsDir } from './media'
 import { DEFAULT_VST3_DIRS, PluginScanner } from './pluginScanner'
 import { generatedDir, isInside, PROJECT_EXTENSION, safeFileName, SettingsStore, songsDir } from './projectStore'
@@ -42,7 +45,8 @@ process.env.HF_HOME ??= join(bulkData, 'models', 'huggingface')
 process.env.TORCH_HOME ??= join(bulkData, 'models', 'torch')
 
 const settings = new SettingsStore(join(userData, 'settings.json'))
-const updates = new UpdateChecker(app.getVersion(), settings)
+// NOTA_UPDATE_FROM pretends to be an older version, to try updating from a development build.
+const updates = new UpdateChecker(process.env.NOTA_UPDATE_FROM || app.getVersion(), settings, updateTarget())
 updates.on('change', (update) => send('app:update', update))
 // Generated audio lives in the open project's package; the root is set when one opens.
 const cache = new AssetCache()
@@ -385,6 +389,35 @@ function registerIpc() {
     const url = updates.available?.url
     if (url?.startsWith('https://github.com/')) void shell.openExternal(url)
   })
+  // Download this system's file from the newer release and install it (see updateInstaller.ts).
+  // The usual quit saves the project first; on the Mac and with a .deb the app comes back by itself.
+  let installing = false
+  handle('app:installUpdate', async () => {
+    const update = updates.available
+    const target = updateTarget()
+    if (!update || installing) return
+    if (!update.asset || !target) {
+      if (update.url.startsWith('https://github.com/')) void shell.openExternal(update.url)
+      return
+    }
+    installing = true
+    const progress = (p: UpdateProgress) => send('app:updateProgress', p)
+    try {
+      progress({ status: 'downloading', progress: 0 })
+      const file = await downloadAsset(update.asset, `Nota/${app.getVersion()}`, (p) => progress({ status: 'downloading', progress: p }))
+      progress({ status: 'installing' })
+      const outcome = await installUpdate(file, target, app.isPackaged, (path) => (app.isPackaged ? void shell.openPath(path) : shell.showItemInFolder(path)))
+      if (outcome === 'opened') progress({ status: 'opened' })
+      else {
+        if (outcome === 'restart') app.relaunch()
+        app.quit()
+      }
+    } catch (err) {
+      progress({ status: 'failed', error: err instanceof Error ? err.message : String(err) })
+    } finally {
+      installing = false
+    }
+  })
   handle('prefs:chooseProjectsDir', async () => {
     const res = await dialog.showOpenDialog(win!, {
       title: 'Choose where new projects are saved',
@@ -511,24 +544,30 @@ function registerIpc() {
       ]
     })
     if (res.canceled || !res.filePath) return null
-    if (withChanges) {
-      const binary = engine.snapshot().binaryPath
-      if (!binary) throw new Error('The audio engine isn’t available, so the changes can’t be rendered')
-      const rendered = await renderWithChanges(binary, input, {
-        durationSec: song.durationSec,
-        cuts,
-        speed: song.speed,
-        semitones,
-        cents,
-        sampleRate: song.source.sampleRate ?? 48000
-      })
-      try {
-        await exportAudio(rendered.path, res.filePath)
-      } finally {
-        await rendered.cleanup()
-      }
-    } else await exportAudio(input, res.filePath)
-    shell.showItemInFolder(res.filePath)
+    // Progress for the window: rendering the changes (most of the time), then writing the file.
+    const file = res.filePath
+    const report = (progress: number | null) => send('songs:exportProgress', { id, title: `${song.title} (${label})`, progress })
+    report(0)
+    try {
+      if (withChanges) {
+        const binary = engine.snapshot().binaryPath
+        if (!binary) throw new Error('The audio engine isn’t available, so the changes can’t be rendered')
+        const rendered = await renderWithChanges(
+          binary,
+          input,
+          { durationSec: song.durationSec, cuts, speed: song.speed, semitones, cents, sampleRate: song.source.sampleRate ?? 48000 },
+          (p) => report(p * 0.8)
+        )
+        try {
+          await exportAudio(rendered.path, file, new CutMap(cuts, song.durationSec).kept / song.speed, (p) => report(0.8 + p * 0.2))
+        } finally {
+          await rendered.cleanup()
+        }
+      } else await exportAudio(input, file, song.durationSec, report)
+    } finally {
+      report(null)
+    }
+    shell.showItemInFolder(file)
     return res.filePath
   })
   handle('songs:relink', async (id: string) => {

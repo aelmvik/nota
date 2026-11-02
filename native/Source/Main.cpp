@@ -265,6 +265,9 @@ private:
         const int block = script.hasProperty ("blockSize") ? (int) script["blockSize"] : 256;
         const auto total = (juce::int64) ((double) script["seconds"] * sr);
         const bool logBlocks = (bool) script["log"];
+        // "progress": report how far along the render is (exports), in hundredths.
+        const bool logProgress = (bool) script["progress"];
+        int lastPercent = -1;
 
         SongPlayer player;
         player.prepare (sr, block);
@@ -309,6 +312,19 @@ private:
             out.copyFrom (0, (int) pos, blockBuf, 0, 0, n);
             out.copyFrom (1, (int) pos, blockBuf, 1, 0, n);
             player.housekeeping();
+
+            if (logProgress && total > 0)
+            {
+                const auto percent = (int) ((pos + n) * 100 / total);
+                if (percent != lastPercent)
+                {
+                    lastPercent = percent;
+                    auto p = juce::DynamicObject::Ptr (new juce::DynamicObject());
+                    p->setProperty ("type", "progress");
+                    p->setProperty ("progress", percent / 100.0);
+                    Protocol::send (juce::var (p.get()));
+                }
+            }
 
             if (logBlocks)
             {

@@ -264,7 +264,12 @@ h1, h2, h3, h4, h5, p { margin: 0; }
 .statusbar-sep { width: 1px; height: 12px; background: rgba(255, 255, 255, 0.3); }
 .statusbar .is-warn { color: #ffd27a; }
 .statusbar-update { margin-left: 10px; padding: 1px 8px; border: 1px solid currentColor; border-radius: 9px; background: none; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
-.statusbar-update:hover { background: rgba(255, 255, 255, 0.14); }
+.statusbar-update:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); }
+.statusbar-update { position: relative; overflow: hidden; }
+.statusbar-update:disabled { cursor: default; }
+.statusbar-update > span { position: relative; }
+/* How much of the update has downloaded, filling the button */
+.statusbar-update > .statusbar-update-fill { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(255, 255, 255, 0.22); transition: width 0.2s linear; }
 .statusbar-io { display: inline-flex; align-items: center; gap: 3px; }
 .io-label { margin-left: 6px; }
 .io-bar { position: relative; width: 4px; height: 13px; margin-left: 2px; background: rgba(255, 255, 255, 0.18); border-radius: 1px; overflow: hidden; }
@@ -1042,6 +1047,13 @@ body.is-resizing, body.is-resizing * { cursor: ns-resize !important; user-select
 
 .toasts { position: fixed; right: 16px; bottom: 44px; display: flex; flex-direction: column; gap: 8px; z-index: 100; pointer-events: none; }
 .app.with-side .toasts { right: 316px; }
+/* An export being written: its name, a bar and the percentage */
+.toast-progress { min-width: 280px; }
+.toast-progress-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.toast-progress-text > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast-progress-bar { display: block; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.22); overflow: hidden; }
+.toast-progress-bar > span { display: block; height: 100%; background: #fff; transition: width 0.2s linear; }
+.toast-progress-pct { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 34px; text-align: right; }
 .toast {
   display: flex;
   align-items: center;

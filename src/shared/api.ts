@@ -1,6 +1,6 @@
 import type { BeatGrid } from './beats'
 import type { TakeState } from './takes'
-import type { UpdateCheck, UpdateInfo } from './updates'
+import type { UpdateCheck, UpdateInfo, UpdateProgress } from './updates'
 import type {
   EngineDeviceState,
   EngineMeters,
@@ -104,6 +104,8 @@ export interface NotaApi {
     /** The song's transcribed bass notes, or progress while they're being made (also pushed via onNotesState) */
     notes(id: string): Promise<NotesState>
     onNotesState(cb: (e: { hash: string; state: NotesState }) => void): () => void
+    /** An export's progress (0..1) while it's written; null when it's done or failed */
+    onExportProgress(cb: (e: { id: string; title: string; progress: number | null }) => void): () => void
     /** Your latest take of the song (also pushed via onTakeState) */
     take(id: string): Promise<TakeState>
     /** Start recording your bass for a take of the song (the input opens if it isn't) */
@@ -202,7 +204,10 @@ export interface NotaApi {
     checkUpdates(): Promise<UpdateCheck>
     /** Open the newer release's page in the browser */
     openUpdate(): Promise<void>
+    /** Download the newer release's file for this system and install it (progress via onUpdateProgress) */
+    installUpdate(): Promise<void>
     onUpdate(cb: (update: UpdateInfo | null) => void): () => void
+    onUpdateProgress(cb: (progress: UpdateProgress) => void): () => void
   }
   /** App menu: Settings… (⌘,) */
   onMenuSettings(cb: () => void): () => void

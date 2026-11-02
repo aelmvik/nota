@@ -177,8 +177,29 @@ function useFileDrop() {
 
 function Toasts() {
   const toasts = useStore((s) => s.toasts)
+  // Exports being written, with how far along they are.
+  const [exports, setExports] = useState<Record<string, { title: string; progress: number }>>({})
+  useEffect(
+    () =>
+      window.nota.songs.onExportProgress(({ id, title, progress }) =>
+        setExports(({ [id]: _, ...rest }) => (progress === null ? rest : { ...rest, [id]: { title, progress } }))
+      ),
+    []
+  )
   return (
     <div className="toasts" aria-live="polite">
+      {Object.entries(exports).map(([id, e]) => (
+        <div key={`export-${id}`} className="toast toast-progress" role="status">
+          <Icon name="download" size={14} />
+          <span className="toast-progress-text">
+            <span>Exporting {e.title}…</span>
+            <span className="toast-progress-bar">
+              <span style={{ width: `${Math.round(e.progress * 100)}%` }} />
+            </span>
+          </span>
+          <span className="toast-progress-pct">{Math.round(e.progress * 100)}%</span>
+        </div>
+      ))}
       {toasts.map((t) => (
         <div key={t.id} className={`toast toast-${t.kind}`}>
           {t.kind === 'error' && <Icon name="alert" size={14} />}

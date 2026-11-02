@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import readline from 'node:readline'
 import { CutMap } from '../shared/cuts'
 import type { TimeRegion } from '../shared/types'
 
@@ -18,7 +19,9 @@ export interface RenderedTrack {
 export async function renderWithChanges(
   engineBinary: string,
   input: string,
-  opts: { durationSec: number; cuts: TimeRegion[]; speed: number; semitones: number; cents: number; sampleRate: number }
+  opts: { durationSec: number; cuts: TimeRegion[]; speed: number; semitones: number; cents: number; sampleRate: number },
+  /** How far along the render is, 0..1 */
+  onProgress?: (progress: number) => void
 ): Promise<RenderedTrack> {
   const dir = await mkdtemp(join(tmpdir(), 'nota-export-'))
   const cleanup = () => rm(dir, { recursive: true, force: true })
@@ -31,6 +34,7 @@ export async function renderWithChanges(
       JSON.stringify({
         sampleRate: opts.sampleRate,
         blockSize: 1024,
+        progress: true,
         // The stretched song is longer (slower) or shorter (faster) than the original; cut parts are skipped.
         seconds: new CutMap(opts.cuts, opts.durationSec).kept / opts.speed + 0.05,
         commands: [
@@ -44,7 +48,16 @@ export async function renderWithChanges(
       })
     )
     await new Promise<void>((resolve, reject) => {
-      const child = spawn(engineBinary, ['--render', script, out], { stdio: ['ignore', 'ignore', 'pipe'] })
+      const child = spawn(engineBinary, ['--render', script, out], { stdio: ['ignore', 'pipe', 'pipe'] })
+      // The engine reports progress as JSON lines ({"type":"progress","progress":0.42}).
+      readline.createInterface({ input: child.stdout }).on('line', (line) => {
+        try {
+          const msg = JSON.parse(line)
+          if (msg?.type === 'progress' && typeof msg.progress === 'number') onProgress?.(msg.progress)
+        } catch {
+          // not one of ours
+        }
+      })
       let err = ''
       child.stderr.on('data', (d) => (err += String(d)))
       child.on('error', reject)
