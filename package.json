@@ -1,8 +1,8 @@
 {
   "name": "nota",
   "productName": "Nøta",
-  "version": "1.0.0",
-  "description": "Bass practice app for macOS and Windows: separate the bass from any song, loop and slow down, and play along through your own plugins.",
+  "version": "1.1.0",
+  "description": "Bass practice app for macOS, Windows and Linux: separate the bass from any song, loop and slow down, and play along through your own plugins.",
   "author": "Anton Elmvik",
   "license": "AGPL-3.0-or-later",
   "homepage": "https://antonelmvik.com/nota",

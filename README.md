@@ -1,6 +1,6 @@
 # Nøta
 
-A bass practice app for macOS (Apple Silicon) and Windows. Import the songs you want to learn and Nøta splits each one into an **isolated bass part** (to learn it) and a **backing track without bass** (to play along). Loop and slow down the hard bits, change the key, and play your bass through your own VST3 and Audio Unit plug-ins, all in one window.
+A bass practice app for macOS (Apple Silicon), Windows and Linux. Import the songs you want to learn and Nøta splits each one into an **isolated bass part** (to learn it) and a **backing track without bass** (to play along). Loop and slow down the hard bits, change the key, and play your bass through your own VST3 and Audio Unit plug-ins, all in one window.
 
 **Website:** [antonelmvik.com/nota](https://antonelmvik.com/nota) · **Download:** [latest release](../../releases/latest)
 
@@ -42,11 +42,12 @@ Get the latest version from the [Releases](../../releases) page. Nøta is free.
 
   It removes the "downloaded from the internet" mark that makes macOS block the app. If macOS says it can't verify Nøta (rather than "damaged"), **System Settings → Privacy & Security → Open Anyway** works too.
 - **Windows** (10 or 11, 64-bit): run **Nøta Setup**. It installs for your user only, without an administrator password. The installer isn't signed yet, so Windows says "Windows protected your PC" the first time: click **More info**, then **Run anyway**.
+- **Linux** (x64; new in 1.1, a preview tested on Debian 13 with GNOME): on Debian or Ubuntu, install the `.deb` with `sudo apt install ./nota_<version>_amd64.deb` (or open it in Software). It also installs `pipewire-jack`, which Nøta uses for low latency. Elsewhere, the AppImage runs on most distributions: make it executable (`chmod +x`) and open it.
 
 **First launch:**
 1. Create a project and import a few songs.
 2. Nøta offers to **install the audio environment**: Python, PyTorch and the separation models, about 1 GB on disk (a few hundred MB to download). Separation, tempo and key detection and the Notes view run in it, all on your computer.
-3. In **Settings → Audio**, choose your audio interface. On Windows, pick **ASIO** as the driver to hear your bass live.
+3. In **Settings → Audio**, choose your audio interface. On Windows, pick **ASIO** as the driver to hear your bass live, and on Linux **JACK**.
 
 Separation takes about a minute per song on an Apple Silicon Mac or with an NVIDIA GPU, and several minutes on a low power laptop's CPU. It runs in the background, and the selected song goes first; the original plays while you wait.
 
@@ -99,7 +100,7 @@ Per-song settings (speed, key, loops, grid) live on the song. Levels and effects
 
 ## Building from source
 
-Requirements on a Mac: Node 20+, Xcode or the Command Line Tools, and CMake (`brew install cmake`). On Windows: Node 20+, Visual Studio 2022 Build Tools (C++), CMake, Git, and [MSYS2](https://www.msys2.org) for building FFmpeg (`npm run tools:build` lists the packages it needs if they're missing). On Linux (in progress, see [Linux](#linux)), on Debian or Ubuntu: `sudo apt install git build-essential cmake pkg-config nodejs npm nasm libasound2-dev libjack-jackd2-dev libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxcomposite-dev libfreetype-dev libfontconfig1-dev`, and `pipewire-jack` for JACK on a PipeWire desktop. FFmpeg and Python don't need to be installed: Nøta builds and bundles its own.
+Requirements on a Mac: Node 20+, Xcode or the Command Line Tools, and CMake (`brew install cmake`). On Windows: Node 20+, Visual Studio 2022 Build Tools (C++), CMake, Git, and [MSYS2](https://www.msys2.org) for building FFmpeg (`npm run tools:build` lists the packages it needs if they're missing). On Linux, on Debian or Ubuntu: `sudo apt install git build-essential cmake pkg-config nodejs npm nasm libasound2-dev libjack-jackd2-dev libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev libxcomposite-dev libfreetype-dev libfontconfig1-dev`, and `pipewire-jack` for JACK on a PipeWire desktop. FFmpeg and Python don't need to be installed: Nøta builds and bundles its own.
 
 ```bash
 npm install
@@ -112,7 +113,7 @@ npm run package             # Mac: dist/mac-arm64/Nøta.app (ad-hoc signed). Win
 
 On Windows on ARM the same steps build the x64 app. Pushes to `main` build the Windows installer on GitHub Actions (`.github/workflows/windows.yml`), on a clean Windows machine that also checks the engine doesn't need the Visual C++ runtime, and the Linux packages on Ubuntu 22.04 (`.github/workflows/linux.yml`).
 
-Where things go: the audio environment and models in `~/Library/Application Support/Nøta` on a Mac, in `%LOCALAPPDATA%\Nøta` on Windows (settings in `%APPDATA%\Nøta`), in `~/.local/share/Nøta` on Linux (settings in `~/.config/Nøta`). Projects are portable between the two: relative paths are stored with `/`, and Audio Unit effects show as "Mac only" on Windows and keep their settings.
+Where things go: the audio environment and models in `~/Library/Application Support/Nøta` on a Mac, in `%LOCALAPPDATA%\Nøta` on Windows (settings in `%APPDATA%\Nøta`), in `~/.local/share/Nøta` on Linux (settings in `~/.config/Nøta`). Projects are portable between all three: relative paths are stored with `/`, and Audio Unit effects show as "Mac only" on Windows and Linux and keep their settings.
 
 `npm test` runs the tests (vitest) and `npm run typecheck` checks the types. `tests/engineRender.test.ts` checks song playback sample by sample: `NotaEngine --render <script.json> <out.wav>` runs the engine's song path from a script instead of an audio device and the test compares the output with the source frames (bit-exact playback, loop wraps, mode switches, seeks, resampling, slow-down, key change, the metronome and the count-in; skipped if the engine isn't built). The service tests run real audio through import, separation, validation, saving, reopening and project folders, with only the separation model replaced by a fake.
 
@@ -120,9 +121,9 @@ Environment overrides for development: `NOTA_ENGINE_PATH`, `NOTA_PYTHON`, `NOTA_
 
 ### Linux
 
-Linux isn't supported yet, but a port is under way, and the platform-specific parts are kept apart (`JUCE_LINUX` in the engine, `process.platform === 'linux'` in the app). Working so far, on x64 with GCC:
+Linux is new in 1.1, as a preview: tested on Debian 13 with GNOME on x64, built with GCC. The platform-specific parts are kept apart (`JUCE_LINUX` in the engine, `process.platform === 'linux'` in the app). How it works there:
 
-- **Engine:** `npm run engine:build` builds with GCC and passes the playback tests. ALSA and JACK are both offered. ALSA's device list is cut down to one entry per card and device, and names read "System default (PipeWire …)" or "card, device". JACK is the low-latency route: on a PipeWire desktop, install `pipewire-jack`. Under JACK the playhead is timed from JACK's own latency figures (a JUCE patch reads the latency range, which PipeWire fills in). The app puts PipeWire's JACK library first when it starts the engine (Debian keeps it out of the default path), and the JACK buffer menu sets PipeWire's buffer size (`PIPEWIRE_LATENCY`). When PipeWire runs a multichannel interface as surround sound, Settings → Audio says so and offers **Use as audio interface**, which switches it to PipeWire's **Pro Audio** profile. To do it by hand, set the interface to that profile (in pavucontrol, or `wpctl status` for the card's ID, `pw-cli enum-params <id> EnumProfile` for its profiles, then `wpctl set-profile <id> <index>`): its inputs are then numbered in hardware order (Input 1, Input 2 …). In a surround profile PipeWire names them after speakers, in an order that isn't the hardware's, and Nøta shows those names as they are. Linux doesn't say what a device is, so the system default, the sound server and the computer's own sound card are treated as a built-in mic and speakers: their input only opens while something listens, and Monitor asks first.
+- **Engine:** `npm run engine:build` builds with GCC and passes the playback tests. ALSA and JACK are both offered. ALSA's device list is cut down to one entry per card and device, and names read "System default (PipeWire …)" or "card, device". JACK is the low-latency route: on a PipeWire desktop it needs `pipewire-jack`, which the `.deb` installs; when it's missing, Settings → Audio says so and offers the install command. Under JACK the playhead is timed from JACK's own latency figures (a JUCE patch reads the latency range, which PipeWire fills in). The app puts PipeWire's JACK library first when it starts the engine (Debian keeps it out of the default path), and the JACK buffer menu sets PipeWire's buffer size (`PIPEWIRE_LATENCY`). When PipeWire runs a multichannel interface as surround sound, Settings → Audio says so and offers **Use as audio interface**, which switches it to PipeWire's **Pro Audio** profile. To do it by hand, set the interface to that profile (in pavucontrol, or `wpctl status` for the card's ID, `pw-cli enum-params <id> EnumProfile` for its profiles, then `wpctl set-profile <id> <index>`): its inputs are then numbered in hardware order (Input 1, Input 2 …). In a surround profile PipeWire names them after speakers, in an order that isn't the hardware's, and Nøta shows those names as they are. Linux doesn't say what a device is, so the system default, the sound server and the computer's own sound card are treated as a built-in mic and speakers: their input only opens while something listens, and Monitor asks first.
 - **Tools:** `npm run tools:build` builds the same audio-only FFmpeg and LAME with GCC (it needs `nasm` on x64) and fetches uv's Linux release. With them the service tests run too.
 - **Window:** on GNOME (Wayland, which Electron uses by itself), the brand bar is the title bar with GNOME's own window buttons over its right end, the hidden menu's shortcuts work, and Alt is free for the app's gestures (GNOME moves windows with Super).
 - **Python:** PyPI's Linux PyTorch comes with NVIDIA's CUDA libraries (about 2.5 GB), so on Linux uv installs PyTorch's CPU build (`--torch-backend cpu`, about 200 MB), in `npm run setup:separation` and in the app. Separation on a laptop CPU takes about 1.2× the song's length (four to five minutes for a song). Both `separate.py` and `analyze.py` use an NVIDIA GPU when PyTorch has CUDA, but the app doesn't install a CUDA build yet.
@@ -161,7 +162,7 @@ The window and menus already work off the Mac (the brand bar is the title bar, t
 
 ## Known limitations
 
-- **Platforms:** Apple Silicon Macs and 64-bit Windows. Intel Macs aren't supported (PyTorch no longer builds for them), and Linux isn't yet (see [Linux](#linux)). ASIO on Windows is new and has seen little testing with real interfaces.
+- **Platforms:** Apple Silicon Macs, 64-bit Windows, and 64-bit Linux as a preview (see [Linux](#linux)). Intel Macs aren't supported (PyTorch no longer builds for them). ASIO on Windows and JACK on Linux have seen little testing with real interfaces.
 - **Not signed yet:** the Mac app isn't notarised and the Windows installer isn't code-signed, so both systems ask once before opening them (see [Download](#download)).
 - **Separation on the CPU** (Windows without an NVIDIA GPU) takes several minutes per song.
 - **Bluetooth headphones:** the input device is only opened while Monitor or the tuner is on, so songs play to Bluetooth headphones in full quality. With a Bluetooth headset's own microphone as the input, turning on Monitor or the tuner switches the headset to call quality (16–24 kHz) for the song too; Nøta says so under the input and suggests another microphone. Bluetooth also adds 150 ms or more, too late to monitor your bass, and buffers below 512 samples are raised to 512 there.
