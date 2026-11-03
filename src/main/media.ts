@@ -183,7 +183,7 @@ const WAVE_SAMPLE_RATE = 22050
  * (int8) and a "brightness" colour index (0 = all bass, 255 = all treble),
  * interleaved as [min, max, colour, …]. Brightness comes from a three-band
  * split (≈200 Hz / ≈2 kHz) averaged over 10 ms, which is what lets kicks and
- * bass read warm and cymbals and vocals read pale, as in FL Studio.
+ * bass read warm and cymbals and vocals read pale.
  */
 export interface WaveformData {
   perSecond: number

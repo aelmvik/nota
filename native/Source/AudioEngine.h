@@ -65,13 +65,16 @@ public:
     void setOutputIncludesBass (bool include) { outputIncludesBass.store (include); }
     bool setBypassed (const juce::String& slotId, bool bypassed);
     juce::String openEditor (const juce::String& slotId);
-    /** A click in the Mixer: opens the effect's window, brings it back in front of Nøta, or closes it if it was in front. */
+    /** A click in the Mixer: opens the effect's window, or closes it if it's open. */
     juce::String toggleEditor (const juce::String& slotId);
     void closeEditor (const juce::String& slotId);
     void closeAllEditors();
     /** Plugin windows' title bars follow Nøta's theme and background colour (0xRRGGBB, or -1)
         on Windows and the Mac; on Linux the window manager draws them. */
     void setWindowTheme (bool dark, int captionRgb);
+    /** Whether one of Nøta's own windows has the focus. Plugin windows hide while
+        neither it nor one of them has, so they don't float over other apps. */
+    void setAppActive (bool active);
     juce::var getChainState();
     void clearChain();
 
@@ -137,6 +140,13 @@ private:
     std::vector<std::unique_ptr<EditorWindow>> editors;
     bool darkWindows = false;
     int windowCaption = -1;
+    bool appActive = true;
+    /** Shows the plugin windows while Nøta or the engine (a click in a plugin window)
+        is the app in front, and hides them otherwise. Checked a few times a second
+        while any are open: the focus leaves one app before it arrives in the other. */
+    void updateEditorVisibility();
+    juce::TimedCallback visibilityCheck { [this] { updateEditorVisibility(); } };
+    int checksInBackground = 0;
 
     std::atomic<bool> monitoring { false };
     std::atomic<bool> outputIncludesBass { true };

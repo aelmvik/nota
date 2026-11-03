@@ -22,23 +22,3 @@ void setTitleBarTheme (void* handle, bool dark, int captionRgb)
                                             : RGB ((captionRgb >> 16) & 0xff, (captionRgb >> 8) & 0xff, captionRgb & 0xff);
     DwmSetWindowAttribute (hwnd, 35, &caption, sizeof (caption));
 }
-
-void bringToForeground (void* handle)
-{
-    const auto hwnd = (HWND) handle;
-    if (hwnd == nullptr || SetForegroundWindow (hwnd))
-        return;
-
-    // Windows only lets the app in front hand the foreground over, and the engine
-    // runs behind Nøta's window. Sharing the front app's input state for a moment
-    // counts as that, the usual way for a helper process to show a window someone
-    // asked for.
-    const auto front = GetForegroundWindow();
-    const auto frontThread = front != nullptr ? GetWindowThreadProcessId (front, nullptr) : 0;
-    const auto thisThread = GetCurrentThreadId();
-    if (frontThread == 0 || frontThread == thisThread || ! AttachThreadInput (thisThread, frontThread, TRUE))
-        return;
-    BringWindowToTop (hwnd);
-    SetForegroundWindow (hwnd);
-    AttachThreadInput (thisThread, frontThread, FALSE);
-}

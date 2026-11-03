@@ -385,10 +385,23 @@ public:
        #endif
         setContentOwned (editor, true);
         setResizable (editor->isResizable(), false);
+        // Floating over Nøta, as a DAW's plugin windows do, so a click in Nøta never
+        // hides one behind it. While you're in another app they're hidden instead.
+        setAlwaysOnTop (true);
         centreWithSize (getWidth(), getHeight());
         setVisible (true);
         applyTheme();
-        bringToFront();
+    }
+
+    /** Hidden while you're in another app. On the native window only: showing the
+        component again would also take the focus from Nøta. */
+    void setShown (bool shouldShow)
+    {
+        if (shouldShow == shown)
+            return;
+        shown = shouldShow;
+        if (auto* peer = getPeer())
+            peer->setVisible (shown);
     }
 
     /** The title bar follows Nøta's light or dark theme, in its background colour. */
@@ -407,31 +420,6 @@ public:
         setColour (juce::ResizableWindow::backgroundColourId, background);
         repaint();
        #endif
-    }
-
-    /** In front of Nøta's window: the engine is a separate app, behind it. */
-    void bringToFront()
-    {
-        juce::Process::makeForegroundProcess();
-        toFront (true);
-       #if JUCE_WINDOWS
-        bringToForeground (getWindowHandle());
-       #endif
-    }
-
-    /** Whether the window is in front, or was until a moment ago: a click in Nøta's
-        Mixer makes Nøta's window active first, so a window that was in front has only
-        just stopped being active when the click arrives. */
-    bool wasInFront() const
-    {
-        return isActiveWindow() || juce::Time::getMillisecondCounter() - lastActive < 800;
-    }
-
-    void activeWindowStatusChanged() override
-    {
-        DocumentWindow::activeWindowStatusChanged();
-        if (! isActiveWindow())
-            lastActive = juce::Time::getMillisecondCounter();
     }
 
     void closeButtonPressed() override
@@ -462,8 +450,7 @@ public:
    #endif
     AudioEngine& owner;
     juce::String slotId;
-    /** When the window last stopped being the active one (0: not yet). */
-    juce::uint32 lastActive = 0;
+    bool shown = true;
 };
 
 //==============================================================================
@@ -1406,11 +1393,7 @@ juce::String AudioEngine::toggleEditor (const juce::String& slotId)
     {
         if (w->slotId == slotId)
         {
-            // In front: close it. Behind Nøta (you clicked Nøta since): bring it back.
-            if (w->wasInFront())
-                closeEditor (slotId);
-            else
-                w->bringToFront();
+            closeEditor (slotId);
             return {};
         }
     }
@@ -1427,7 +1410,8 @@ juce::String AudioEngine::openEditor (const juce::String& slotId)
     {
         if (w->slotId == slotId)
         {
-            w->bringToFront();
+            w->setShown (true);
+            w->toFront (true);
             return {};
         }
     }
@@ -1440,6 +1424,7 @@ juce::String AudioEngine::openEditor (const juce::String& slotId)
         return "The plugin could not open its interface";
 
     editors.push_back (std::make_unique<EditorWindow> (*this, *slot, editor));
+    visibilityCheck.startTimer (250);
     return {};
 }
 
@@ -1449,6 +1434,27 @@ void AudioEngine::setWindowTheme (bool dark, int captionRgb)
     windowCaption = captionRgb;
     for (auto& w : editors)
         w->applyTheme();
+}
+
+void AudioEngine::setAppActive (bool active)
+{
+    appActive = active;
+}
+
+void AudioEngine::updateEditorVisibility()
+{
+    if (editors.empty())
+    {
+        visibilityCheck.stopTimer();
+        return;
+    }
+    // Hidden after two checks in a row, so a click moving between Nøta and a plugin
+    // window never catches the moment neither is in front.
+    const auto inFront = appActive || juce::Process::isForegroundProcess();
+    checksInBackground = inFront ? 0 : checksInBackground + 1;
+    if (inFront || checksInBackground == 2)
+        for (auto& w : editors)
+            w->setShown (inFront);
 }
 
 void AudioEngine::closeAllEditors()

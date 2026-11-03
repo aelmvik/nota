@@ -1319,6 +1319,7 @@ body.is-resizing, body.is-resizing * { cursor: ns-resize !important; user-select
 .monitor-power { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--line-strong); background: transparent; color: var(--ink-2); font-size: 12px; font-style: italic; cursor: pointer; white-space: nowrap; }
 .monitor-power:hover:not(:disabled) { color: var(--ink); border-color: var(--ink-3); }
 .monitor-power.is-on { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+.monitor-power.is-on:hover:not(:disabled) { background: var(--brand-hover); border-color: var(--brand-hover); color: var(--on-brand); }
 .monitor-power:disabled { opacity: 0.4; cursor: default; }
 
 /* Tuner inside the bass strip */

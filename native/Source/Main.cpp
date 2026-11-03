@@ -510,6 +510,11 @@ private:
             e.setWindowTheme ((bool) msg["dark"], caption.length() == 6 ? caption.getHexValue32() : -1);
             respond (id, true);
         }
+        else if (cmd == "setAppActive")
+        {
+            e.setAppActive ((bool) msg["active"]);
+            respond (id, true);
+        }
         else if (cmd == "openEditor")
         {
             respond (id, true, e.openEditor (msg["slotId"].toString()));

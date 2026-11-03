@@ -66,6 +66,11 @@ const engine = new EngineHost(resolveEngineBinary(appRoot, process.resourcesPath
 const sendTheme = () => void engine.call('setWindowTheme', { dark: nativeTheme.shouldUseDarkColors, caption: windowBackground() }).catch(() => {})
 engine.on('ready', sendTheme)
 nativeTheme.on('updated', sendTheme)
+// Plugin windows float over Nøta and hide while you're in another app.
+const sendActive = () => void engine.call('setAppActive', { active: BrowserWindow.getFocusedWindow() !== null }).catch(() => {})
+engine.on('ready', sendActive)
+app.on('browser-window-focus', sendActive)
+app.on('browser-window-blur', sendActive)
 const scanner = new PluginScanner(join(userData, 'plugins.json'))
 
 let audio: AudioSession

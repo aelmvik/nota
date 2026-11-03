@@ -105,7 +105,7 @@ function AppearanceSection({ p }: { p: Preferences }) {
 function PlaybackSection({ p }: { p: Preferences }) {
   return (
     <>
-      <Row label="When playback stops" help="Space and the play button. “Back to start” is how FL Studio works: stop, and press Space again to replay the same spot.">
+      <Row label="When playback stops" help="Space and the play button. With “Back to start”, stop and press Space again to replay the same spot.">
         <Choice
           value={p.stopBehavior}
           options={[

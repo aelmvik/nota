@@ -64,7 +64,7 @@ Shortcuts below are written for the Mac. On Windows, ⌘ in menu shortcuts is Ct
 6. **Metronome:** **Click** or `K`. The ··· menu has the meter, where the bar starts, ½× / 2×, a typed or tapped tempo, and a 1–2 bar count-in.
 7. **Bass input:** choose your interface in **Settings → Audio** (on Windows, pick ASIO as the driver to hear your bass live), then the input your bass is plugged into (or a pair, such as 1 + 2, if you play in stereo; also in the **Mixer**), and set the gain on the interface (watch the clip light). Turn on **Monitor** to hear your bass; the deck's quick levels (Monitor, Bass, Song) set the balance without opening the Mixer. Press `T` for the tuner. The round-trip latency is shown in the status bar.
 8. **Export:** the song's ⋯ menu exports the original, the bass or the play-along as WAV (24-bit), FLAC or MP3, for use in other software. If the song has speed or key changes or cuts, you choose whether to include them (with changes, cut parts are left out); the audio engine then renders the track offline through the same stretcher as playback (about 30 seconds for a 7-minute song).
-9. **Effects:** in the **Mixer**, **Add effect** in the Bass or Output strip (scan for plug-ins the first time). Click an effect to open its window; the power button bypasses it. Plug-in settings are saved with the project. The **Bass** chain processes your bass; the **Output** chain processes everything you hear. Turn off **Include my bass** to keep your bass out of the output effects (it then joins the mix after them).
+9. **Effects:** in the **Mixer**, **Add effect** in the Bass or Output strip (scan for plug-ins the first time). Click an effect to open or close its window; effect windows float over Nøta and hide while you use another app. The power button bypasses an effect. Plug-in settings are saved with the project. The **Bass** chain processes your bass; the **Output** chain processes everything you hear. Turn off **Include my bass** to keep your bass out of the output effects (it then joins the mix after them).
 
 Every slider takes a typed value: click it, type, press Enter. ⌥-click resets it. Right-click a song for its menu. ⌘Z undoes the last edit. The **Shortcuts** button in the top bar lists every shortcut.
 
@@ -88,7 +88,7 @@ Mixer, Projects, Settings and Shortcuts share the right-hand pane. Click one in 
 
 - **Audio:** driver (Windows), interface, input channel, sample rate and buffer size.
 - **Appearance:** System, light or dark theme; brand colour (Cobalt, Vermilion or Emerald).
-- **Playback:** go back to the start point on stop (like FL Studio) or stay where it stopped.
+- **Playback:** go back to the start point on stop or stay where it stopped.
 - **Waveform:** snap to the beat grid; colour by frequency or a single colour.
 - **Tuning:** tuner reference pitch (A = 430–450 Hz).
 - **Separation:** standard or high quality (slower); install or reinstall the audio environment.

@@ -18,8 +18,8 @@ import { flipHeld, flipKey } from '../platform'
 // and down the keyboard, and double-clicking the keyboard fits all notes.
 // Ctrl+right-click fits both: the whole song and all its notes.
 //
-// Edit mode (E, or Edit by the view switch) corrects the notes as in FL
-// Studio's piano roll: click adds a note (as long as the last one you touched),
+// Edit mode (E, or Edit by the view switch) corrects the notes as in a DAW's
+// piano roll: click adds a note (as long as the last one you touched),
 // drag moves, dragging the end resizes, Shift+drag copies, right-click (and
 // drag) deletes, Ctrl+drag selects. Snapped to the grid (⌘/Alt for free);
 // the arrows move the selection, Delete deletes, and copy and paste work. The
@@ -201,7 +201,7 @@ export function NotesView(props: Props) {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   useEffect(() => setSelected(new Set()), [song.id, editing])
   const gesture = useRef<Gesture | null>(null)
-  /** The length of the note last touched: new notes get it (as in FL Studio) */
+  /** The length of the note last touched: new notes get it */
   const lastLen = useRef<number | null>(null)
 
   // Your take, layered over the song's notes (in display time). It isn't graded:
