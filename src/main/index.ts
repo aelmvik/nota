@@ -580,7 +580,7 @@ function registerIpc() {
     } catch (err) {
       if (!signal.aborted) throw err
       // Cancelled: whatever FFmpeg had written so far goes.
-      await rm(file, { force: true }).catch(() => {})
+      await rm(file, { force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {})
       return null
     } finally {
       exporting.delete(exportId)

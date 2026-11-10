@@ -26,7 +26,8 @@ export async function renderWithChanges(
   signal?: AbortSignal
 ): Promise<RenderedTrack> {
   const dir = await mkdtemp(join(tmpdir(), 'nota-export-'))
-  const cleanup = () => rm(dir, { recursive: true, force: true })
+  // Windows can hold a just-closed file for a moment (antivirus, the indexer): rm retries.
+  const cleanup = () => rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   try {
     const script = join(dir, 'render.json')
     const out = join(dir, 'render.wav')
@@ -62,12 +63,21 @@ export async function renderWithChanges(
       })
       let err = ''
       child.stderr.on('data', (d) => (err += String(d)))
-      child.on('error', reject)
-      child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(err.trim() || 'The audio engine couldn’t render the export'))))
+      // Settled when the engine has exited (also when cancelled), so its files are closed before cleanup.
+      let failure: Error | null = null
+      child.on('error', (e) => {
+        failure ??= e
+        if (child.pid === undefined) reject(e) // never started: no 'close' follows
+      })
+      child.on('close', (code) => {
+        if (failure) reject(failure)
+        else if (code === 0) resolve()
+        else reject(new Error(err.trim() || 'The audio engine couldn’t render the export'))
+      })
     })
     return { path: out, cleanup }
   } catch (e) {
-    await cleanup()
+    await cleanup().catch(() => {}) // the render's own error says more
     throw e
   }
 }
