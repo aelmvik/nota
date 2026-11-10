@@ -147,16 +147,23 @@ export async function transcodeToFlac(input: string, output: string): Promise<vo
  * Write audio for use in other software: WAV (24-bit), FLAC or MP3 (VBR ~190 kbit/s), by the output's extension.
  * With `durationSec`, `onProgress` hears how far along it is (0..1), from FFmpeg's own progress report.
  */
-export async function exportAudio(input: string, output: string, durationSec?: number, onProgress?: (progress: number) => void): Promise<void> {
+export async function exportAudio(
+  input: string,
+  output: string,
+  durationSec?: number,
+  onProgress?: (progress: number) => void,
+  /** Aborting stops FFmpeg; the promise rejects with an AbortError */
+  signal?: AbortSignal
+): Promise<void> {
   const ext = extname(output).toLowerCase()
   const codec = ext === '.mp3' ? ['-c:a', 'libmp3lame', '-q:a', '2'] : ext === '.flac' ? ['-c:a', 'flac'] : ['-c:a', 'pcm_s24le']
   const args = ['-v', 'error', '-nostdin', '-y', '-i', input, '-vn', '-map_metadata', '-1', ...codec]
   if (!durationSec || !onProgress) {
-    await run(requireTool('ffmpeg'), [...args, output])
+    await run(requireTool('ffmpeg'), [...args, output], signal)
     return
   }
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(requireTool('ffmpeg'), [...args, '-progress', 'pipe:1', '-stats_period', '0.1', '-nostats', output], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(requireTool('ffmpeg'), [...args, '-progress', 'pipe:1', '-stats_period', '0.1', '-nostats', output], { stdio: ['ignore', 'pipe', 'pipe'], signal })
     let err = ''
     let buffered = ''
     child.stdout.on('data', (d: Buffer) => {

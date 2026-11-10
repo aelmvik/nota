@@ -965,11 +965,15 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputCha
         if (lock.isLocked())
             if (auto* take = activeTake.load (std::memory_order_acquire))
             {
-                const float* channels[] = { left, right };
-                if (! take->write (channels, numSamples))
-                    takeDropped.store (true); // disk fell behind: the take has a gap
-                takeFrames += numSamples;
-                recordingTake = true;
+                // At its longest, or out of marks to map it with: nothing more is written.
+                if (takeFrames < takeMaxFrames && takeMarkCount.load (std::memory_order_relaxed) < takeMarks.size())
+                {
+                    const float* channels[] = { left, right };
+                    if (! take->write (channels, numSamples))
+                        takeDropped.store (true); // disk fell behind: the take has a gap
+                    takeFrames += numSamples;
+                    recordingTake = true;
+                }
             }
     }
 
@@ -1025,8 +1029,10 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const* inputCha
     song.process (songL, songR, numSamples, clickL, clickR);
     if (recordingTake)
     {
+        // Under the lock again: stopTake() frees the marks once it has detached the writer.
+        const juce::GenericScopedTryLock<juce::SpinLock> lock (takeLock);
         const auto count = takeMarkCount.load (std::memory_order_relaxed);
-        if (count < takeMarks.size())
+        if (lock.isLocked() && activeTake.load (std::memory_order_acquire) != nullptr && count < takeMarks.size())
         {
             double pos = 0.0;
             const bool playing = song.blockEndPosition (pos);
@@ -1521,10 +1527,12 @@ juce::String AudioEngine::startTake (const juce::String& path, double maxSeconds
         takeThread.startThread();
     takeWriter = std::make_unique<juce::AudioFormatWriter::ThreadedWriter> (writer, takeThread, 1 << 17);
 
-    const auto blocks = juce::jlimit (1.0, 3600.0, maxSeconds) * takeRate / juce::jmax (16, currentBlockSize);
+    const auto seconds = juce::jlimit (1.0, 3600.0, maxSeconds);
+    const auto blocks = seconds * takeRate / juce::jmax (16, currentBlockSize);
     takeMarks.assign ((size_t) blocks + 4096, {});
     takeMarkCount.store (0);
     takeFrames = 0;
+    takeMaxFrames = (juce::int64) (seconds * takeRate);
     takeDropped.store (false);
     takePath = path;
     activeTake.store (takeWriter.get(), std::memory_order_release);

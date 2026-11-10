@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { BeatGrid } from '../../shared/beats'
-import { beatGrid, bpmOf, effectiveGrid, isPitchNeutral, pitchRatio, trainerNext, type GridLike } from '../../shared/music'
+import { beatGrid, beatsPerBarOf, bpmOf, effectiveGrid, isPitchNeutral, pitchRatio, trainerNext, type GridLike } from '../../shared/music'
 import { effectiveMode, isModeAvailable } from '../../shared/project'
 import type { Song } from '../../shared/types'
 import { attempt, getState, metronome, player, setState, toast, useStore } from '../state/store'
@@ -43,7 +43,7 @@ export async function startPlayback() {
   const token = ++countInToken
   setState({ countingIn: true })
   metronome.setVolume(settings.volume)
-  const perBar = song.beatsPerBar ?? song.analysis.beatsPerBar ?? 4
+  const perBar = beatsPerBarOf(song)
   const period = 60 / bpm / song.speed
   // The engine counts in and starts the song on the next beat, on one clock.
   await player.countInAndPlay(settings.countInBars * perBar, period, perBar)

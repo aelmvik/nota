@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -186,6 +186,23 @@ describe.skipIf(!engine)('native song playback (offline render)', () => {
     } finally {
       await rendered.cleanup()
     }
+  })
+
+  it('stops an export render when it is cancelled, and leaves no temp files', async () => {
+    const { renderWithChanges } = await import('../src/main/exportRender')
+    const a = join(dir, 'cancel.wav')
+    sawTrack(a, 60)
+    const folders = () => readdirSync(tmpdir()).filter((n) => n.startsWith('nota-export-')).sort()
+    const before = folders()
+    const controller = new AbortController()
+    let heard = 0
+    const job = renderWithChanges(engine!, a, { durationSec: 60, cuts: [], speed: 0.5, semitones: 2, cents: 0, sampleRate: SR }, (p) => {
+      heard = p
+      if (p > 0) controller.abort()
+    }, controller.signal)
+    await expect(job).rejects.toThrow(/abort/i)
+    expect(heard).toBeLessThan(1)
+    expect(folders()).toEqual(before)
   })
 
   it('switches modes sample-locked, with a 30 ms crossfade', () => {
@@ -565,5 +582,20 @@ describe.skipIf(!engine)('native song playback (offline render)', () => {
       expect(level).toBeGreaterThan(0.2)
       expect(maxDiff).toBeLessThan(1e-5) // 24-bit FLAC vs float WAV
     }
+  })
+
+  it('fails, with a message, when the rendered file can’t be written', () => {
+    const a = join(dir, 'a.wav')
+    sawTrack(a, 1)
+    const scriptPath = join(dir, 'unwritable.json')
+    writeFileSync(scriptPath, JSON.stringify({ sampleRate: SR, blockSize: 256, seconds: 0.5, commands: [vol, { at: 0, cmd: 'song.load', songId: 's', tracks: tracks(a), position: 0, mode: 0 }, { at: 0, cmd: 'song.play' }] }))
+    let failure: { status?: number; stderr?: string } = {}
+    try {
+      execFileSync(engine!, ['--render', scriptPath, join(dir, 'no-such-folder', 'out.wav')], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    } catch (err) {
+      failure = err as typeof failure
+    }
+    expect(failure.status).toBe(1)
+    expect(failure.stderr).toMatch(/Could not create the rendered file/)
   })
 })

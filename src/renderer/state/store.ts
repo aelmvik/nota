@@ -44,6 +44,8 @@ export interface AppState {
   prefs: Preferences
   /** Projects, Settings or Keys, shown in the right-hand pane in place of the effects chain. */
   sidePane: 'projects' | 'settings' | 'keys' | null
+  /** The song the Export window is open for */
+  exportSongId: string | null
 }
 
 /** Song playback and the metronome, both in the native engine (see usePlaybackSync). */
@@ -75,7 +77,8 @@ let state: AppState = {
   tunerMute: readPref('tunerMute', true),
   confirmMonitorRisk: false,
   prefs: DEFAULT_PREFERENCES,
-  sidePane: null
+  sidePane: null,
+  exportSongId: null
 }
 
 const listeners = new Set<() => void>()

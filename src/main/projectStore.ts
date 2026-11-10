@@ -32,9 +32,12 @@ export function isInside(dir: string, path: string): boolean {
 }
 
 /** Write a file so readers only ever see the old or the new contents (temp file, then rename). */
+let tmpCount = 0
+
 export async function writeFileAtomic(path: string, contents: string | Uint8Array) {
   await mkdir(dirname(path), { recursive: true })
-  const tmp = `${path}.${process.pid}.${Date.now()}.tmp`
+  // The counter keeps two writes started in the same millisecond apart.
+  const tmp = `${path}.${process.pid}.${Date.now()}.${tmpCount++}.tmp`
   await writeFile(tmp, contents)
   await replaceFile(tmp, path)
 }
@@ -106,17 +109,36 @@ export class SettingsStore {
   constructor(private readonly path: string) {}
 
   async load() {
+    let text: string | null = null
     try {
-      this.data = { ...DEFAULT_SETTINGS, ...JSON.parse(await readFile(this.path, 'utf8')) }
+      text = await readFile(this.path, 'utf8')
+    } catch {
+      // first run: no settings yet
+    }
+    try {
+      if (text === null) throw new Error('no settings')
+      const parsed: unknown = JSON.parse(text)
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error('not an object')
+      this.data = { ...DEFAULT_SETTINGS, ...parsed }
+      if (!Array.isArray(this.data.recent)) this.data.recent = []
+      if (!Array.isArray(this.data.knownProjects)) this.data.knownProjects = []
       // Settings from before knownProjects existed: the recent list is what we know.
       if (!this.data.knownProjects.length) this.data.knownProjects = this.data.recent.map((r) => r.path)
       this.data.preferences = normalizePreferences(this.data.preferences)
       if (typeof this.data.practiceDays !== 'object' || !this.data.practiceDays) this.data.practiceDays = {}
-    } catch {
+    } catch (err) {
+      // A damaged file is kept beside the new one, so recent projects and practice time can be recovered.
+      if (text !== null) {
+        console.error(`Could not read ${this.path}; keeping it as ${this.path}.corrupt:`, err)
+        await writeFile(`${this.path}.corrupt`, text).catch(() => {})
+      }
       this.data = { ...DEFAULT_SETTINGS }
     }
     return this.data
   }
+
+  /** Writes one at a time, in order, so a later change never lands under an earlier one. */
+  private writing: Promise<void> = Promise.resolve()
 
   get(): AppSettings {
     return this.data
@@ -124,7 +146,9 @@ export class SettingsStore {
 
   async update(patch: Partial<AppSettings>) {
     this.data = { ...this.data, ...patch }
-    await writeFileAtomic(this.path, JSON.stringify(this.data, null, 2))
+    const write = this.writing.catch(() => {}).then(() => writeFileAtomic(this.path, JSON.stringify(this.data, null, 2)))
+    this.writing = write
+    await write
   }
 
   async touchRecent(path: string, name: string) {

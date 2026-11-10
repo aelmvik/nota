@@ -1,8 +1,10 @@
 import { execFile, spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { createWriteStream, existsSync } from 'node:fs'
 import { chmod, copyFile, mkdtemp, readdir, rename, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
+import { pipeline } from 'node:stream/promises'
 import { promisify } from 'node:util'
 import type { UpdateAsset, UpdateTarget } from '../shared/updates'
 
@@ -27,24 +29,38 @@ export function updateTarget(platform: NodeJS.Platform = process.platform, arch:
   return null
 }
 
-/** Downloads the asset into a new temporary folder; `onProgress` hears 0..1. Returns the file. */
+/**
+ * Downloads the asset into a new temporary folder; `onProgress` hears 0..1. Returns the file.
+ * A download that fails, is cut short or doesn't match the release's checksum is removed.
+ */
 export async function downloadAsset(asset: UpdateAsset, userAgent: string, onProgress: (progress: number) => void): Promise<string> {
   const res = await fetch(asset.url, { headers: { 'User-Agent': userAgent }, redirect: 'follow' })
   if (!res.ok || !res.body) throw new Error(`The download failed (GitHub answered ${res.status})`)
   const total = Number(res.headers.get('content-length')) || asset.size
-  const file = join(await mkdtemp(join(tmpdir(), 'nota-update-')), basename(asset.name))
-  const out = createWriteStream(file)
+  const dir = await mkdtemp(join(tmpdir(), 'nota-update-'))
+  const file = join(dir, basename(asset.name))
+  const hash = createHash('sha256')
   let received = 0
   try {
-    for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
-      if (!out.write(chunk)) await new Promise((r) => out.once('drain', r))
-      received += chunk.byteLength
-      if (total > 0) onProgress(Math.min(1, received / total))
-    }
-  } finally {
-    await new Promise<void>((r) => out.end(r))
+    // pipeline: a failed write (a full disk) rejects here instead of going unhandled.
+    await pipeline(
+      res.body as unknown as AsyncIterable<Uint8Array>,
+      async function* (chunks) {
+        for await (const chunk of chunks) {
+          hash.update(chunk)
+          received += chunk.byteLength
+          if (total > 0) onProgress(Math.min(1, received / total))
+          yield chunk
+        }
+      },
+      createWriteStream(file)
+    )
+    if (total > 0 && received < total) throw new Error('The download was cut short')
+    if (asset.digest && `sha256:${hash.digest('hex')}` !== asset.digest) throw new Error('The download doesn’t match the file in the release')
+  } catch (err) {
+    await rm(dir, { recursive: true, force: true }).catch(() => {})
+    throw err
   }
-  if (total > 0 && received < total) throw new Error('The download was cut short')
   return file
 }
 

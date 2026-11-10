@@ -32,6 +32,7 @@ export class EngineHost extends EventEmitter {
   private nextId = 1
   private stopping = false
   private crashTimes: number[] = []
+  private restartTimer: NodeJS.Timeout | null = null
   private state: EngineSnapshot
 
   constructor(private readonly binaryPath: string | null) {
@@ -61,6 +62,7 @@ export class EngineHost extends EventEmitter {
 
   start() {
     if (!this.binaryPath || this.child) return
+    this.cancelRestart()
     this.stopping = false
     this.setState({ status: 'starting', message: null })
 
@@ -74,6 +76,8 @@ export class EngineHost extends EventEmitter {
     readline.createInterface({ input: child.stdout }).on('line', (line) => this.onLine(line))
 
     child.on('error', (err) => {
+      // It never started, so no 'exit' follows: forget it, or Restart could never try again.
+      if (this.child === child && child.pid === undefined) this.child = null
       this.setState({ status: 'crashed', message: `Could not start the audio engine: ${err.message}` })
     })
     child.on('exit', (code, signal) => {
@@ -95,8 +99,15 @@ export class EngineHost extends EventEmitter {
         return
       }
       this.setState({ status: 'crashed', monitoring: false, message: `The audio engine stopped unexpectedly (${reason}). Restarting…` })
-      setTimeout(() => this.start(), 800)
+      this.restartTimer = setTimeout(() => this.start(), 800)
     })
+  }
+
+  private cancelRestart(): boolean {
+    if (!this.restartTimer) return false
+    clearTimeout(this.restartTimer)
+    this.restartTimer = null
+    return true
   }
 
   /** Manual restart after repeated crashes. */
@@ -110,6 +121,8 @@ export class EngineHost extends EventEmitter {
 
   stop() {
     this.stopping = true
+    // Stopped between a crash and its restart: it stays stopped.
+    if (this.cancelRestart()) this.setState({ status: 'stopped', message: null, monitoring: false })
     if (!this.child) return
     try {
       this.child.stdin.write(JSON.stringify({ id: 0, cmd: 'quit' }) + '\n')

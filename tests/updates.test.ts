@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { createHash } from 'node:crypto'
+import { readFileSync, readdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname } from 'node:path'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { isNewer, newerRelease, parseVersion, pickAsset } from '../src/shared/updates'
-import { updateTarget } from '../src/main/updateInstaller'
+import { downloadAsset, updateTarget } from '../src/main/updateInstaller'
 
 describe('update check', () => {
   it('compares versions as numbers', () => {
@@ -34,6 +38,10 @@ describe('update check', () => {
     expect(pickAsset([{ ...asset('Nota-Setup-1.1.0.exe'), browser_download_url: 'https://example.com/Nota-Setup-1.1.0.exe' }], 'windows')).toBeNull()
     const release = { tag_name: 'v1.1.0', html_url: 'https://github.com/owner/nota/releases/tag/v1.1.0', assets }
     expect(newerRelease(release, '1.0.0', 'windows')?.asset?.url).toBe(assets[1].browser_download_url)
+    // The checksum GitHub lists comes along, if it is one.
+    const digest = `sha256:${'AB'.repeat(32)}`
+    expect(pickAsset([{ ...asset('Nota-Setup-1.1.0.exe'), digest }], 'windows')?.digest).toBe(digest.toLowerCase())
+    expect(pickAsset([{ ...asset('Nota-Setup-1.1.0.exe'), digest: 'md5:1234' }], 'windows')).not.toHaveProperty('digest')
   })
 
   it('knows which file this copy updates from', () => {
@@ -43,5 +51,36 @@ describe('update check', () => {
     expect(updateTarget('linux', 'x64', {})).toBe('linux-deb')
     expect(updateTarget('linux', 'x64', { APPIMAGE: '/home/me/Nota.AppImage' })).toBe('linux-appimage')
     expect(updateTarget('linux', 'arm64', {})).toBeNull()
+  })
+})
+
+describe('update download', () => {
+  const body = Buffer.from('not really an installer, but long enough to be worth hashing')
+  const sha = `sha256:${createHash('sha256').update(body).digest('hex')}`
+  const asset = (over: Record<string, unknown> = {}) => ({ name: 'Nota-Setup-9.9.9.exe', url: 'https://github.com/owner/nota/releases/download/v9.9.9/Nota-Setup-9.9.9.exe', size: body.length, ...over })
+  const serve = () => vi.stubGlobal('fetch', async () => new Response(body, { headers: { 'content-length': String(body.length) } }))
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('saves the file and reports progress', async () => {
+    serve()
+    const progress: number[] = []
+    const file = await downloadAsset(asset({ digest: sha }), 'Nota/test', (p) => progress.push(p))
+    expect(readFileSync(file)).toEqual(body)
+    expect(progress.at(-1)).toBe(1)
+    rmSync(dirname(file), { recursive: true, force: true })
+  })
+
+  it('refuses a download that doesn’t match the release’s checksum, and removes it', async () => {
+    serve()
+    const folders = () => readdirSync(tmpdir()).filter((n) => n.startsWith('nota-update-')).sort()
+    const before = folders()
+    await expect(downloadAsset(asset({ digest: `sha256:${'0'.repeat(64)}` }), 'Nota/test', () => {})).rejects.toThrow(/doesn’t match/)
+    expect(folders()).toEqual(before)
+  })
+
+  it('fails as an error, not a crash, when the file can’t be written', async () => {
+    serve()
+    // A name too long for any file system: the write stream fails when it opens.
+    await expect(downloadAsset(asset({ name: `${'x'.repeat(400)}.exe` }), 'Nota/test', () => {})).rejects.toThrow()
   })
 })

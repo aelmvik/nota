@@ -6,7 +6,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { AssetCache, validateStems } from '../src/main/assetCache'
 import { getTools } from '../src/main/media'
 import { ProjectService } from '../src/main/projectService'
-import { SettingsStore } from '../src/main/projectStore'
+import { AnalysisService } from '../src/main/analysisService'
+import { SettingsStore, writeFileAtomic } from '../src/main/projectStore'
 import { SeparationQueue } from '../src/main/separationQueue'
 import { SeparationCancelledError, type SeparationProvider, type SeparationRequest } from '../src/main/separation/provider'
 import type { SeparationEvent } from '../src/shared/processing'
@@ -453,5 +454,183 @@ describe('saving with plugin states', () => {
       ['old', 'captured'],
       ['new', null]
     ])
+  })
+})
+
+describe('separation queue: cancelling late', () => {
+  it('tells the song its job ended when it is cancelled while the output is checked', async () => {
+    const { events, listener } = collect()
+    let checking!: () => void
+    const reached = new Promise<void>((r) => (checking = r))
+    let finish!: () => void
+    // A cache whose check of the finished stems takes a while, as probing two files does.
+    const cache = {
+      stemDir: () => join(dir, 'late-cancel'),
+      findValidStems: async () => null,
+      commitStems: () =>
+        new Promise<{ assets: never }>((resolve) => {
+          finish = () => resolve({ assets: {} as never })
+          checking()
+        })
+    }
+    const provider: SeparationProvider = {
+      name: 'Instant',
+      model: 'fake-v1',
+      checkAvailability: async () => ({ available: true }),
+      separate: async () => ({ model: 'fake-v1', bass: { path: 'bass.flac', rmsDb: -18 }, backing: { path: 'backing.flac', rmsDb: -14 } })
+    }
+    const queue = new SeparationQueue(provider, cache, listener)
+    await queue.enqueue({ hash: 'late', inputPath: '/dev/null', durationSec: 2, label: 'A' })
+    await reached
+    queue.cancel('late')
+    finish()
+    await queue.whenIdle()
+    expect(events.at(-1)).toEqual(['late', 'cancel'])
+    expect(events.some((e) => e[1] === 'succeed')).toBe(false)
+  })
+})
+
+describe('settings file', () => {
+  it('keeps two writes started in the same moment apart', async () => {
+    const file = join(dir, 'atomic', 'settings.json')
+    for (let i = 0; i < 20; i++) await Promise.all([writeFileAtomic(file, 'a'.repeat(100)), writeFileAtomic(file, 'b'.repeat(5000))])
+    expect(readdirSync(join(dir, 'atomic'))).toEqual(['settings.json'])
+  })
+
+  it('writes changes made at once in order, the last one last', async () => {
+    const file = join(dir, 'ordered', 'settings.json')
+    const settings = new SettingsStore(file)
+    await Promise.all([settings.addPracticeDay('2026-11-10', 5), settings.update({ lastUpdateCheck: 'now' }), settings.addPracticeDay('2026-11-10', 7)])
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toMatchObject({ practiceDays: { '2026-11-10': 12 }, lastUpdateCheck: 'now' })
+  })
+
+  it('keeps a damaged settings file beside the new one', async () => {
+    const file = join(dir, 'damaged-settings.json')
+    const damaged = '{"recent":[{"path":"/a.nota","name":"A","openedAt":"x"}],"practiceDays":{"2026-11-01":3600}'
+    writeFileSync(file, damaged)
+    const settings = new SettingsStore(file)
+    expect((await settings.load()).recent).toEqual([])
+    await settings.addPracticeDay('2026-11-10', 5)
+    expect(readFileSync(`${file}.corrupt`, 'utf8')).toBe(damaged)
+    // A first run (no file) leaves nothing behind.
+    const fresh = join(dir, 'no-settings.json')
+    await new SettingsStore(fresh).load()
+    expect(existsSync(`${fresh}.corrupt`)).toBe(false)
+  })
+})
+
+describe('analysis service', () => {
+  // A stand-in for analyze.py, run by Node: answers after a moment, or fails.
+  const worker = (name: string, line: object) => {
+    const script = join(dir, name)
+    writeFileSync(script, `setTimeout(() => console.log(${JSON.stringify(JSON.stringify(line))}), 100)`)
+    return { python: () => process.execPath, script: () => script } as never
+  }
+
+  it('analyses a song once when it is asked for twice at the same time', async () => {
+    const states: string[] = []
+    const env = worker('analyze-ok.cjs', { type: 'done', beats: [], downbeats: [], tracker: 'fake', key: 'C major', keyConfidence: 1, tuningCents: 0, durationSec: 2 })
+    const service = new AnalysisService(env, () => join(dir, 'analysis-once'), (_hash, a) => states.push(a.status), null)
+    await Promise.all([service.enqueue('abc', '/song.wav'), service.enqueue('abc', '/song.wav')])
+    for (let i = 0; i < 100 && !states.includes('ready'); i++) await new Promise((r) => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 300)) // a second run would have started by now
+    expect(states).toEqual(['running', 'ready'])
+  })
+
+  it('remembers a failed analysis through a save, so it is not run again on every open', async () => {
+    let failed: import('../src/shared/types').SongAnalysis | null = null
+    const env = worker('analyze-fail.cjs', { type: 'error', message: 'The audio is too short to analyse' })
+    const service = new AnalysisService(env, () => join(dir, 'analysis-failed'), (_hash, a) => a.status === 'failed' && (failed = a), null)
+    await service.enqueue('abc', '/song.wav')
+    for (let i = 0; i < 100 && !failed; i++) await new Promise((r) => setTimeout(r, 50))
+    expect(failed).toMatchObject({ status: 'failed', error: 'The audio is too short to analyse' })
+
+    const P = await import('../src/shared/project')
+    const song = P.makeSong({ title: 'a', artist: null, durationSec: 2, source: { path: '/a.wav', hash: 'abc', sizeBytes: 1, format: 'wav', codec: null, sampleRate: null, channels: null, missing: false } })
+    const project = P.addSongs(P.createProject('Test'), [{ ...song, analysis: failed! }])
+    expect(P.parseProject(P.serializeProject(project)).songs[0].analysis).toEqual(failed)
+  })
+})
+
+describe.skipIf(!hasFfmpeg)('project service: relinking and reopening', () => {
+  it('analyses the new recording when a song is relinked to different audio', async () => {
+    const root = join(dir, 'relink')
+    mkdirSync(root, { recursive: true })
+    const [first, second] = [join(root, 'First.wav'), join(root, 'Second.wav')]
+    tone(first, 2, 220)
+    tone(second, 3, 330)
+    const analysed: string[] = []
+    const svc = new ProjectService({
+      cache: new AssetCache(),
+      provider: new FakeProvider({ available: false }),
+      settings: new SettingsStore(join(root, 'settings.json')),
+      projectsDir: join(root, 'projects'),
+      autosaveDelayMs: 10,
+      // Analysis that answers at once, with what it "heard" in that file.
+      analysis: (listener) =>
+        ({
+          enqueue: async (hash: string) => {
+            analysed.push(hash)
+            listener(hash, { status: 'ready', version: 2, bpm: 100 + analysed.length, key: 'E minor' })
+          },
+          clear() {}
+        }) as never
+    })
+    await svc.create('Relink')
+    await svc.importFiles([first])
+    for (let i = 0; i < 100 && svc.project!.songs[0].analysis.status !== 'ready'; i++) await new Promise((r) => setTimeout(r, 10))
+    const { id, source } = svc.project!.songs[0]
+    expect(svc.project!.songs[0].analysis.bpm).toBe(101)
+
+    // The same audio somewhere else keeps what was detected.
+    const copy = join(root, 'First copy.wav')
+    writeFileSync(copy, readFileSync(first))
+    expect(await svc.relink(id, copy)).toBe('relinked')
+    expect(analysed).toEqual([source.hash])
+
+    expect(await svc.relink(id, second)).toBe('different')
+    expect(await svc.relink(id, second, true)).toBe('relinked')
+    for (let i = 0; i < 100 && svc.project!.songs[0].analysis.status !== 'ready'; i++) await new Promise((r) => setTimeout(r, 10))
+    const song = svc.project!.songs[0]
+    expect(song.source.hash).not.toBe(source.hash)
+    expect(analysed).toEqual([source.hash, song.source.hash])
+    expect(song.analysis.bpm).toBe(102)
+    await svc.close()
+  })
+})
+
+describe('project service: reopening', () => {
+  it('keeps an edit that was waiting to be saved when the open project is opened again', async () => {
+    const root = join(dir, 'reopen')
+    const svc = new ProjectService({
+      cache: new AssetCache(),
+      provider: new FakeProvider({ available: false }),
+      settings: new SettingsStore(join(root, 'settings.json')),
+      projectsDir: join(root, 'projects'),
+      autosaveDelayMs: 10_000
+    })
+    await svc.create('Before')
+    const path = svc.filePath!
+    svc.rename('After')
+    await svc.open(path) // from the Recent list, say
+    expect(svc.project!.name).toBe('After')
+    await svc.close()
+    expect(JSON.parse(readFileSync(join(path, 'project.json'), 'utf8')).name).toBe('After')
+  })
+})
+
+describe.skipIf(!hasFfmpeg)('exporting audio', () => {
+  it('stops FFmpeg when the export is cancelled', async () => {
+    const { exportAudio } = await import('../src/main/media')
+    const input = join(dir, 'export-cancel.wav')
+    tone(input, 120)
+    const controller = new AbortController()
+    const out = join(dir, 'export-cancel.mp3')
+    const job = exportAudio(input, out, 120, (p) => p > 0 && controller.abort(), controller.signal)
+    await expect(job).rejects.toThrow(/abort/i)
+    // A cancel before any progress, too (no progress report at all).
+    const early = new AbortController()
+    early.abort()
+    await expect(exportAudio(input, join(dir, 'export-early.wav'), undefined, undefined, early.signal)).rejects.toThrow(/abort/i)
   })
 })

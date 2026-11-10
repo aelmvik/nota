@@ -277,8 +277,29 @@ private:
             commands = *list;
         int nextCommand = 0;
 
-        juce::AudioBuffer<float> out (2, (int) total);
-        out.clear();
+        // Written block by block, so a long export doesn't sit in memory: to a
+        // file beside the result, moved into place once it is complete (the
+        // result may be the very file being played).
+        const juce::File outFile (outPath);
+        const auto partFile = outFile.getSiblingFile (outFile.getFileName() + ".part");
+        partFile.deleteFile();
+        auto stream = std::make_unique<juce::FileOutputStream> (partFile);
+        if (stream->failedToOpen())
+        {
+            std::cerr << "Could not create the rendered file" << std::endl;
+            return false;
+        }
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::AudioFormatWriter> writer (wav.createWriterFor (stream.get(), sr, 2, 32, {}, 0));
+        if (writer == nullptr)
+        {
+            stream.reset();
+            partFile.deleteFile();
+            std::cerr << "Could not create the rendered file" << std::endl;
+            return false;
+        }
+        stream.release(); // the writer owns it now
+        bool written = true;
         juce::AudioBuffer<float> blockBuf (2, block);
 
         for (juce::int64 pos = 0; pos < total; pos += block)
@@ -309,8 +330,11 @@ private:
             const int n = (int) juce::jmin<juce::int64> (block, total - pos);
             blockBuf.clear();
             player.process (blockBuf.getWritePointer (0), blockBuf.getWritePointer (1), n);
-            out.copyFrom (0, (int) pos, blockBuf, 0, 0, n);
-            out.copyFrom (1, (int) pos, blockBuf, 1, 0, n);
+            if (! writer->writeFromAudioSampleBuffer (blockBuf, 0, n))
+            {
+                written = false;
+                break;
+            }
             player.housekeeping();
 
             if (logProgress && total > 0)
@@ -335,13 +359,15 @@ private:
             }
         }
 
-        const juce::File outFile (outPath);
-        outFile.deleteFile();
-        juce::WavAudioFormat wav;
-        std::unique_ptr<juce::AudioFormatWriter> writer (wav.createWriterFor (new juce::FileOutputStream (outFile), sr, 2, 32, {}, 0));
-        if (writer == nullptr)
+        written = written && writer->flush();
+        writer.reset(); // finishes the header and closes the file
+        written = written && partFile.replaceFileIn (outFile);
+        if (! written)
+        {
+            partFile.deleteFile();
+            std::cerr << "Could not write the rendered file (is the disk full?)" << std::endl;
             return false;
-        writer->writeFromAudioSampleBuffer (out, 0, out.getNumSamples());
+        }
         return true;
     }
 

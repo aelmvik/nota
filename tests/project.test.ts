@@ -120,6 +120,14 @@ describe('practice settings', () => {
     expect(P.normalizeLoop(null, 100)).toBeNull()
   })
 
+  it('ignores values that are not numbers', () => {
+    let p = withSongs('a')
+    const id = p.songs[0].id
+    p = P.updateSong(p, id, { volume: 0.5, position: 12 })
+    p = P.updateSong(p, id, { volume: NaN, position: NaN, loop: { start: NaN, end: 5, enabled: true } })
+    expect(p.songs[0]).toMatchObject({ volume: 0.5, position: 12, loop: null })
+    expect(P.normalizeLoop({ start: 1, end: Infinity, enabled: true }, 100)).toBeNull()
+  })
   it('clamps volume and position', () => {
     let p = withSongs('a')
     const id = p.songs[0].id
@@ -175,5 +183,33 @@ describe('serialization', () => {
     expect(() => P.parseProject('{"format":"other"}')).toThrow(/not a Nøta project/)
     expect(() => P.parseProject(JSON.stringify({ ...raw, version: 7 }))).toThrow(/Unsupported/)
     expect(() => P.parseProject(JSON.stringify({ ...raw, songs: [{ title: 'x' }] }))).toThrow(/damaged/)
+  })
+  it('repairs a hand-edited song: no id or length, a volume and position out of range', () => {
+    const raw = JSON.parse(P.serializeProject(withSongs('a', 'b')))
+    delete raw.songs[0].id
+    delete raw.songs[0].durationSec
+    delete raw.songs[0].title
+    Object.assign(raw.songs[1], { volume: 99, position: 5000 })
+    const back = P.parseProject(JSON.stringify(raw))
+    expect(back.songs[0].id).toEqual(expect.any(String))
+    expect(back.songs[0].id).not.toBe(back.songs[1].id)
+    expect(back.songs[0]).toMatchObject({ durationSec: 0, title: 'Untitled' })
+    expect(back.songs[1]).toMatchObject({ volume: P.MAX_VOLUME, position: 200 })
+    expect(back.selectedSongId).toBe(back.songs[0].id) // the selection named the lost id: the first song, under its new one
+  })
+})
+
+describe('plugin states', () => {
+  const slot = (slotId: string, state: string | null, bypassed = false) =>
+    ({ slotId, pluginId: slotId, name: slotId, manufacturer: '', format: 'VST3', descriptionXml: '', bypassed, state })
+
+  it('takes captured states without undoing changes made to the effects meanwhile', () => {
+    const before = { ...withSongs('a'), effects: [slot('one', 'old'), slot('two', 'old')] }
+    // While the engine answered: "one" was bypassed, "two" removed and "three" added.
+    const now = { ...before, effects: [slot('one', 'old', true), slot('three', null)] }
+    const captured = [slot('one', 'new'), slot('two', 'new')]
+    expect(P.withEffectStates(now, captured).effects).toEqual([slot('one', 'new', true), slot('three', null)])
+    // A slot the engine gave no state for keeps the one it had.
+    expect(P.withEffectStates(before, [slot('one', null)]).effects[0].state).toBe('old')
   })
 })

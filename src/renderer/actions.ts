@@ -1,9 +1,10 @@
 import type { ImportResult } from '../shared/types'
+import { fileName } from '../shared/paths'
 import { attempt, toast } from './state/store'
 
 export function reportImport(res: ImportResult) {
   if (res.added.length) toast(`Added ${res.added.length} ${res.added.length === 1 ? 'song' : 'songs'}`, 'success')
-  for (const s of res.skipped.slice(0, 4)) toast(`${s.path.split('/').pop()}: ${s.reason}`, 'error', 7000)
+  for (const s of res.skipped.slice(0, 4)) toast(`${fileName(s.path)}: ${s.reason}`, 'error', 7000)
   if (res.skipped.length > 4) toast(`${res.skipped.length - 4} more files were skipped`, 'error')
 }
 
@@ -20,5 +21,5 @@ export async function importPaths(paths: string[]) {
 
 export async function exportSetlist() {
   const path = await attempt(() => window.nota.project.exportSetlist(), 'Setlist')
-  if (path) toast(`Setlist saved as ${path.split('/').pop()}`, 'success')
+  if (path) toast(`Setlist saved as ${fileName(path)}`, 'success')
 }

@@ -208,6 +208,7 @@ private:
     std::vector<TakeMark> takeMarks; // preallocated; only the audio thread appends
     std::atomic<size_t> takeMarkCount { 0 };
     juce::int64 takeFrames = 0;
+    juce::int64 takeMaxFrames = 0; // the take stops being written here
     std::atomic<bool> takeDropped { false };
     juce::String takePath;
     double takeRate = 48000.0;

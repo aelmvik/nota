@@ -21,7 +21,9 @@ export async function renderWithChanges(
   input: string,
   opts: { durationSec: number; cuts: TimeRegion[]; speed: number; semitones: number; cents: number; sampleRate: number },
   /** How far along the render is, 0..1 */
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  /** Aborting stops the engine; the promise rejects with an AbortError and the temp folder is removed */
+  signal?: AbortSignal
 ): Promise<RenderedTrack> {
   const dir = await mkdtemp(join(tmpdir(), 'nota-export-'))
   const cleanup = () => rm(dir, { recursive: true, force: true })
@@ -48,7 +50,7 @@ export async function renderWithChanges(
       })
     )
     await new Promise<void>((resolve, reject) => {
-      const child = spawn(engineBinary, ['--render', script, out], { stdio: ['ignore', 'pipe', 'pipe'] })
+      const child = spawn(engineBinary, ['--render', script, out], { stdio: ['ignore', 'pipe', 'pipe'], signal })
       // The engine reports progress as JSON lines ({"type":"progress","progress":0.42}).
       readline.createInterface({ input: child.stdout }).on('line', (line) => {
         try {

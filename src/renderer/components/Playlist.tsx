@@ -7,14 +7,10 @@ import { importViaDialog } from '../actions'
 import { attempt, player, readPref, toast, useStore, writePref } from '../state/store'
 import { Button, Icon, InlineEdit, Menu, Slider, formatTime, type MenuItem } from './ui'
 import { formatDuration } from '../../shared/practice'
+import { canExportTrack, EXPORT_TRACKS } from '../../shared/exporting'
+import { openExport } from './ExportDialog'
 import { useWaveform, Waveform } from './Waveform'
 import { revealLabel } from '../platform'
-
-/** Export one version of a song (asks about speed and key changes, then where to save). */
-async function exportSong(id: string, kind: 'original' | 'bass' | 'backing') {
-  const path = await attempt(() => window.nota.songs.export(id, kind), 'Export')
-  if (path) toast(`Exported ${path.split('/').pop()}`, 'success')
-}
 
 /**
  * Separation status, shown only when there's something to say: progress,
@@ -94,13 +90,7 @@ function SongRow({ song, index, selected, onDragStart, onDropAt }: {
     { label: song.artist ? 'Edit artist…' : 'Add artist…', icon: 'edit', onSelect: () => setRenaming('artist') },
     { label: revealLabel, icon: 'folder', disabled: song.source.missing, onSelect: () => void attempt(() => api.reveal(song.id)) },
     'separator',
-    { label: 'Export original…', icon: 'download', disabled: song.source.missing && !song.playbackProxy, onSelect: () => void exportSong(song.id, 'original') },
-    ...(song.stems.bass && song.stems.backing
-      ? [
-          { label: 'Export bass…', icon: 'download' as const, onSelect: () => void exportSong(song.id, 'bass') },
-          { label: 'Export play-along…', icon: 'download' as const, onSelect: () => void exportSong(song.id, 'backing') }
-        ]
-      : []),
+    { label: 'Export…', icon: 'download', disabled: !EXPORT_TRACKS.some((t) => canExportTrack(song, t.value)), onSelect: () => openExport(song.id) },
     'separator',
     { label: 'Remove from playlist', icon: 'trash', danger: true, onSelect: () => void attempt(() => api.remove(song.id)) }
   ]

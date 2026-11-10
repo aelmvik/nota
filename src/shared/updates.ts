@@ -11,6 +11,8 @@ export interface UpdateAsset {
   url: string
   /** Bytes */
   size: number
+  /** "sha256:<hex>" as GitHub lists it for the file; the download is checked against it */
+  digest?: string
 }
 
 export interface UpdateInfo {
@@ -42,9 +44,9 @@ export function pickAsset(assets: unknown, target: UpdateTarget | null): UpdateA
   if (!target || !Array.isArray(assets)) return null
   for (const a of assets) {
     if (!a || typeof a !== 'object') continue
-    const { name, browser_download_url: url, size } = a as Record<string, unknown>
+    const { name, browser_download_url: url, size, digest } = a as Record<string, unknown>
     if (typeof name !== 'string' || typeof url !== 'string' || !url.startsWith('https://github.com/')) continue
-    if (ASSET_PATTERNS[target].test(name)) return { name, url, size: typeof size === 'number' ? size : 0 }
+    if (ASSET_PATTERNS[target].test(name)) return { name, url, size: typeof size === 'number' ? size : 0, ...(typeof digest === 'string' && /^sha256:[0-9a-f]{64}$/i.test(digest) ? { digest: digest.toLowerCase() } : {}) }
   }
   return null
 }

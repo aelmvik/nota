@@ -149,6 +149,8 @@ export class ProjectService extends EventEmitter {
   }
 
   async open(path: string): Promise<void> {
+    // Opening the project that is already open reads its file: write the latest edit first.
+    await this.flush()
     const project = await loadProjectFile(path)
     await this.close()
     this.project = project
@@ -225,9 +227,7 @@ export class ProjectService extends EventEmitter {
         project = await this.opts.beforeSave(project)
         // Keep the effects as they are now (one may have been added or removed
         // while the engine answered); only take the captured plugin states.
-        const states = new Map(project.effects.map((e) => [e.slotId, e.state]))
-        if (this.project && this.project.id === project.id)
-          this.project = { ...this.project, effects: this.project.effects.map((e) => (states.has(e.slotId) ? { ...e, state: states.get(e.slotId) ?? e.state } : e)) }
+        if (this.project && this.project.id === project.id) this.project = P.withEffectStates(this.project, project.effects)
       }
       await saveProjectFile(path, project)
       this.saveStatus = this.saveTimer ? 'unsaved' : 'saved'
@@ -476,7 +476,10 @@ export class ProjectService extends EventEmitter {
               ...s,
               durationSec: info.durationSec,
               source: { ...s.source, path: newPath, hash, sizeBytes: info.sizeBytes, format: info.format, codec: info.codec, missing: false },
-              ...(same ? {} : { stems: {}, separation: { status: 'pending' as const, progress: 0 }, playbackProxy: null, loop: null, position: 0 })
+              // Other audio: what was made or detected from the old recording is redone.
+              ...(same
+                ? {}
+                : { stems: {}, separation: { status: 'pending' as const, progress: 0 }, analysis: { status: 'pending' as const }, playbackProxy: null, loop: null, position: 0 })
             }
       )
     )

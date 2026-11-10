@@ -227,6 +227,16 @@ export function bpmOf(song: Pick<Song, 'tempo' | 'analysis'> & { gridScale?: Son
 }
 
 /**
+ * Beats in a bar at the tempo `bpmOf` gives: half or double time changes the
+ * detected meter along with the tempo; a meter set by hand stays as set.
+ */
+export function beatsPerBarOf(song: Pick<Song, 'tempo' | 'analysis' | 'beatsPerBar'> & { gridScale?: Song['gridScale'] }): number {
+  if (song.beatsPerBar != null) return Math.max(1, song.beatsPerBar)
+  const scale = song.tempo ? 1 : (song.gridScale ?? 1)
+  return Math.max(1, Math.round((song.analysis.beatsPerBar ?? 4) * scale))
+}
+
+/**
  * Tempo around time `t`, from the beats within about two bars of it (`span`
  * beat intervals), so it follows tempo changes without jittering beat to beat.
  */

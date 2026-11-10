@@ -13,6 +13,7 @@ import { Icon } from './components/ui'
 import { Welcome } from './components/Welcome'
 import { SettingsPanel, toggleSettings } from './components/Settings'
 import { ShortcutsPanel } from './components/Shortcuts'
+import { ExportDialog } from './components/ExportDialog'
 import { ProjectsPanel } from './components/Projects'
 import { usePracticeTracker } from './practiceTracker'
 import { useTitleBarColors } from './theme'
@@ -24,6 +25,7 @@ function useShortcuts() {
       const t = e.target as HTMLElement
       if (t.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return
       const s = getState()
+      if (s.exportSongId) return // the Export window has the keyboard
       const project = s.snapshot?.project
       const song = project?.songs.find((x) => x.id === project.selectedSongId)
       const update = window.nota.songs.update
@@ -181,8 +183,8 @@ function Toasts() {
   const [exports, setExports] = useState<Record<string, { title: string; progress: number }>>({})
   useEffect(
     () =>
-      window.nota.songs.onExportProgress(({ id, title, progress }) =>
-        setExports(({ [id]: _, ...rest }) => (progress === null ? rest : { ...rest, [id]: { title, progress } }))
+      window.nota.songs.onExportProgress(({ exportId, title, progress }) =>
+        setExports(({ [exportId]: _, ...rest }) => (progress === null ? rest : { ...rest, [exportId]: { title, progress } }))
       ),
     []
   )
@@ -198,6 +200,15 @@ function Toasts() {
             </span>
           </span>
           <span className="toast-progress-pct">{Math.round(e.progress * 100)}%</span>
+          <button
+            type="button"
+            className="toast-cancel"
+            title="Cancel export"
+            aria-label={`Cancel exporting ${e.title}`}
+            onClick={() => void window.nota.songs.cancelExport(id).catch(() => {})}
+          >
+            <Icon name="x" size={12} />
+          </button>
         </div>
       ))}
       {toasts.map((t) => (
@@ -249,6 +260,7 @@ export function App() {
       <Rail onSettings={toggleSettings} />
       {sidePane === 'projects' ? <ProjectsPanel /> : sidePane === 'settings' ? <SettingsPanel /> : sidePane === 'keys' ? <ShortcutsPanel /> : effectsOpen && <MixerPanel />}
       <StatusBar />
+      <ExportDialog />
       <Toasts />
       {dropping && (
         <div className="drop-overlay">

@@ -12,10 +12,11 @@ import { runTranscriber } from './transcription'
 // and the notes are mapped onto the song (src/shared/takes.ts). Only the
 // latest take per song is kept, as notes; the recording itself is deleted.
 
-const MAX_SECONDS = 30 * 60
+/** The longest take: the engine stops writing there, and the take is ended and turned into notes. */
+export const MAX_TAKE_SECONDS = 30 * 60
 
 export class TakeService extends EventEmitter {
-  private recording: { hash: string; root: string; path: string } | null = null
+  private recording: { hash: string; root: string; path: string; limit: NodeJS.Timeout } | null = null
 
   constructor(
     private readonly engine: EngineHost,
@@ -53,8 +54,10 @@ export class TakeService extends EventEmitter {
     if (this.recording) await this.stop()
     const root = this.root()
     const path = join(root, hash, 'take-recording.wav')
-    await this.engine.call('startTake', { path, maxSeconds: MAX_SECONDS })
-    this.recording = { hash, root, path }
+    await this.engine.call('startTake', { path, maxSeconds: MAX_TAKE_SECONDS })
+    const limit = setTimeout(() => void this.stop(), MAX_TAKE_SECONDS * 1000)
+    limit.unref()
+    this.recording = { hash, root, path, limit }
     this.state(hash, { status: 'recording' })
   }
 
@@ -63,6 +66,7 @@ export class TakeService extends EventEmitter {
     const rec = this.recording
     if (!rec) return
     this.recording = null
+    clearTimeout(rec.limit)
     this.state(rec.hash, { status: 'transcribing' })
     const marksPath = `${rec.path}.json`
     try {
@@ -80,6 +84,17 @@ export class TakeService extends EventEmitter {
       await rm(rec.path, { force: true }).catch(() => {})
       await rm(marksPath, { force: true }).catch(() => {})
     }
+  }
+
+  /** Stop recording and throw the take away, without turning it into notes (Nøta is quitting). */
+  async discard() {
+    const rec = this.recording
+    if (!rec) return
+    this.recording = null
+    clearTimeout(rec.limit)
+    await this.engine.call('stopTake', {}, 5000).catch(() => {})
+    await rm(rec.path, { force: true }).catch(() => {})
+    await rm(`${rec.path}.json`, { force: true }).catch(() => {})
   }
 
   async clear(hash: string) {

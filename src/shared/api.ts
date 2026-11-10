@@ -1,3 +1,4 @@
+import type { ExportFormat, ExportRequest, ExportTarget } from './exporting'
 import type { BeatGrid } from './beats'
 import type { TakeState } from './takes'
 import type { UpdateCheck, UpdateInfo, UpdateProgress } from './updates'
@@ -104,8 +105,10 @@ export interface NotaApi {
     /** The song's transcribed bass notes, or progress while they're being made (also pushed via onNotesState) */
     notes(id: string): Promise<NotesState>
     onNotesState(cb: (e: { hash: string; state: NotesState }) => void): () => void
-    /** An export's progress (0..1) while it's written; null when it's done or failed */
-    onExportProgress(cb: (e: { id: string; title: string; progress: number | null }) => void): () => void
+    /** An export's progress (0..1) while it's written; null when it's done, failed or cancelled */
+    onExportProgress(cb: (e: { exportId: string; title: string; progress: number | null }) => void): () => void
+    /** Stop an export that is being written; its unfinished file is removed and export() resolves to null */
+    cancelExport(exportId: string): Promise<void>
     /** Your latest take of the song (also pushed via onTakeState) */
     take(id: string): Promise<TakeState>
     /** Start recording your bass for a take of the song (the input opens if it isn't) */
@@ -114,8 +117,12 @@ export interface NotaApi {
     stopTake(): Promise<void>
     clearTake(id: string): Promise<void>
     onTakeState(cb: (e: { hash: string; state: TakeState }) => void): () => void
-    /** Save one version of the song as WAV, FLAC or MP3 (asks where); resolves to the path, or null if cancelled */
-    export(id: string, kind: 'original' | 'bass' | 'backing'): Promise<string | null>
+    /** Write one version of the song as the Export window set it up; resolves to the path, or null if cancelled while writing */
+    export(id: string, request: ExportRequest): Promise<string | null>
+    /** Where an export named so would go (the Music folder when `folder` is null), and whether a file is there already */
+    exportTarget(folder: string | null, name: string, format: ExportFormat): Promise<ExportTarget>
+    /** Pick the folder to export to; null if cancelled */
+    exportFolder(current: string | null): Promise<string | null>
     remove(id: string): Promise<void>
     move(id: string, toIndex: number): Promise<void>
     select(id: string | null): Promise<void>

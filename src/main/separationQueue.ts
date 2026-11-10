@@ -122,6 +122,9 @@ export class SeparationQueue {
     emit({ type: 'start', model })
     try {
       const cached = await this.cache.findValidStems(job.hash, model, job.durationSec)
+      // Cancelled while the cache was read (or, below, while the output was checked):
+      // the song still hears that the job ended.
+      if (controller.signal.aborted) throw new SeparationCancelledError()
       if (cached) {
         emit({ type: 'succeed', model, warning: cached.warning }, cached.assets)
       } else {
@@ -136,6 +139,7 @@ export class SeparationQueue {
         if (controller.signal.aborted) throw new SeparationCancelledError()
         emit({ type: 'progress', progress: 0.97, stage: 'validating' })
         const committed = await this.cache.commitStems(job.hash, model, job.durationSec, result)
+        if (controller.signal.aborted) throw new SeparationCancelledError()
         emit({ type: 'succeed', model, warning: committed.warning }, committed.assets)
       }
     } catch (err) {

@@ -1,8 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, type MenuItemConstructorOptions } from 'electron'
 import { existsSync } from 'node:fs'
-import { extname, join } from 'node:path'
+import { rm } from 'node:fs/promises'
+import { extname, isAbsolute, join } from 'node:path'
 import { CutMap } from '../shared/cuts'
-import { findSong } from '../shared/project'
+import { findSong, withEffectStates } from '../shared/project'
+import { describeChanges, EXPORT_FORMATS, safeExportName, trackLabel, type ExportFormat, type ExportRequest, type ExportTarget } from '../shared/exporting'
 import type { EffectChain, PluginInfo, SongPatch } from '../shared/types'
 import type { DeviceRequest, TrackKind, TransportCommand, TransportLoad } from '../shared/api'
 import type { EngineTrackSource } from '../shared/types'
@@ -92,7 +94,7 @@ const projects = new ProjectService({
 })
 audio = new AudioSession(engine, projects, {
   get: () => settings.get().audioDefaults,
-  set: (a) => void settings.update({ audioDefaults: a })
+  set: (a) => void settings.update({ audioDefaults: a }).catch((err) => console.error('Could not save the audio setup:', err))
 })
 
 // Song playback in the engine. Only the open project's files may be played.
@@ -146,8 +148,11 @@ async function capturePluginStates() {
   const p = projects.project
   if (!p || p.effects.length === 0) return
   const next = await audio.captureStates(p)
-  const changed = next.effects.some((e, i) => e.state !== p.effects[i]?.state)
-  if (changed && projects.project?.id === p.id) projects.mutate((cur) => ({ ...cur, effects: next.effects }))
+  // Only the states are taken: an effect added, removed or bypassed while the engine answered stays as it is now.
+  const now = projects.project
+  if (now?.id !== p.id) return
+  const changed = withEffectStates(now, next.effects).effects.some((e, i) => e.state !== now.effects[i].state)
+  if (changed) projects.mutate((cur) => withEffectStates(cur, next.effects))
 }
 engine.on('editorClosed', () => void capturePluginStates())
 setInterval(() => void capturePluginStates(), 20_000).unref()
@@ -330,7 +335,13 @@ async function deleteProject(): Promise<boolean> {
   })
   if (choice.response !== 0) return false
   await projects.close()
-  await shell.trashItem(path).catch(() => {})
+  try {
+    await shell.trashItem(path)
+  } catch (err) {
+    // Still on disk: it stays in the list of projects, closed.
+    send('project:change', projects.snapshot())
+    throw new Error(`“${project.name}” couldn’t be moved to the ${trashName()}: ${err instanceof Error ? err.message : String(err)}`)
+  }
   await settings.removeProject(path)
   send('project:change', projects.snapshot())
   return true
@@ -500,8 +511,28 @@ function registerIpc() {
   handle('songs:recordTake', (id: string) => takes.start(requireSong(id).source.hash))
   handle('songs:stopTake', () => takes.stop())
   handle('songs:clearTake', (id: string) => takes.clear(requireSong(id).source.hash))
-  handle('songs:export', async (id: string, kind: 'original' | 'bass' | 'backing') => {
+  // Exports being written, by export id (song and track), so one can be cancelled.
+  const exporting = new Map<string, AbortController>()
+  handle('songs:cancelExport', (exportId: string) => exporting.get(exportId)?.abort())
+  // Where an export goes: the folder chosen in the Export window (the Music folder at first).
+  const exportTarget = (folder: string | null, name: string, format: ExportFormat): ExportTarget => {
+    const dir = folder && isAbsolute(folder) ? folder : app.getPath('music')
+    const path = join(dir, `${safeExportName(name) || 'Export'}.${format}`)
+    return { folder: dir, path, exists: existsSync(path) }
+  }
+  handle('songs:exportTarget', (folder: string | null, name: string, format: ExportFormat) => exportTarget(folder, name, format))
+  handle('songs:exportFolder', async (current: string | null) => {
+    const res = await dialog.showOpenDialog(win!, {
+      title: 'Export to',
+      defaultPath: current ?? app.getPath('music'),
+      properties: ['openDirectory', 'createDirectory']
+    })
+    return res.canceled ? null : (res.filePaths[0] ?? null)
+  })
+  handle('songs:export', async (id: string, req: ExportRequest) => {
     const song = requireSong(id)
+    const kind = req.track
+    if (!EXPORT_FORMATS.some((f) => f.value === req.format)) throw new Error('Unknown export format')
     const input =
       kind === 'original'
         ? song.source.missing && song.playbackProxy
@@ -511,47 +542,23 @@ function registerIpc() {
           ? cache.abs(song.stems[kind]!.cachePath)
           : null
     if (!input || !existsSync(input)) throw new Error(kind === 'original' ? 'The original file is missing' : 'This track isn’t separated yet')
-    const label = kind === 'original' ? 'Original' : kind === 'bass' ? 'Bass' : 'Play Along'
-
-    // With speed or key changes or cuts, ask whether to bake them in.
+    const label = trackLabel(kind)
     const { semitones, cents } = song.pitch
     const cuts = song.cuts
-    const changed = song.speed !== 1 || semitones !== 0 || cents !== 0 || cuts.length > 0
-    const changes = [
-      song.speed !== 1 ? `${Math.round(song.speed * 100)} %` : null,
-      semitones ? `${semitones > 0 ? '+' : '−'}${Math.abs(semitones)} st` : null,
-      cents ? `${cents > 0 ? '+' : '−'}${Math.abs(cents)} ¢` : null,
-      cuts.length ? `${cuts.length} ${cuts.length === 1 ? 'cut' : 'cuts'}` : null
-    ]
-      .filter(Boolean)
-      .join(', ')
-    let withChanges = false
-    if (changed) {
-      const choice = await dialog.showMessageBox(win!, {
-        type: 'question',
-        message: 'Export with your changes?',
-        detail: `This song has ${changes}. Include that in the exported file (cut parts left out), or export it as recorded?`,
-        buttons: [`With changes (${changes})`, 'As recorded', 'Cancel'],
-        defaultId: 0,
-        cancelId: 2
-      })
-      if (choice.response === 2) return null
-      withChanges = choice.response === 0
-    }
+    const withChanges = req.withChanges && describeChanges(song) !== ''
+    const target = exportTarget(req.folder, req.name, req.format)
+    if (!existsSync(target.folder)) throw new Error(`The folder ${target.folder} isn’t there any more`)
+    // Never write over the song itself.
+    if (target.path === input) throw new Error('That is the song’s own file. Choose another name or folder.')
 
-    const res = await dialog.showSaveDialog(win!, {
-      title: `Export ${label.toLowerCase()}`,
-      defaultPath: join(app.getPath('music'), `${safeFileName(song.title)} - ${label}${withChanges ? ` (${changes})` : ''}.wav`),
-      filters: [
-        { name: 'WAV (24-bit)', extensions: ['wav'] },
-        { name: 'FLAC', extensions: ['flac'] },
-        { name: 'MP3', extensions: ['mp3'] }
-      ]
-    })
-    if (res.canceled || !res.filePath) return null
     // Progress for the window: rendering the changes (most of the time), then writing the file.
-    const file = res.filePath
-    const report = (progress: number | null) => send('songs:exportProgress', { id, title: `${song.title} (${label})`, progress })
+    const file = target.path
+    const exportId = `${id}:${kind}`
+    if (exporting.has(exportId)) throw new Error(`${song.title} (${label}) is already being exported`)
+    const controller = new AbortController()
+    const { signal } = controller
+    exporting.set(exportId, controller)
+    const report = (progress: number | null) => send('songs:exportProgress', { exportId, title: `${song.title} (${label})`, progress })
     report(0)
     try {
       if (withChanges) {
@@ -561,19 +568,26 @@ function registerIpc() {
           binary,
           input,
           { durationSec: song.durationSec, cuts, speed: song.speed, semitones, cents, sampleRate: song.source.sampleRate ?? 48000 },
-          (p) => report(p * 0.8)
+          (p) => report(p * 0.8),
+          signal
         )
         try {
-          await exportAudio(rendered.path, file, new CutMap(cuts, song.durationSec).kept / song.speed, (p) => report(0.8 + p * 0.2))
+          await exportAudio(rendered.path, file, new CutMap(cuts, song.durationSec).kept / song.speed, (p) => report(0.8 + p * 0.2), signal)
         } finally {
           await rendered.cleanup()
         }
-      } else await exportAudio(input, file, song.durationSec, report)
+      } else await exportAudio(input, file, song.durationSec, report, signal)
+    } catch (err) {
+      if (!signal.aborted) throw err
+      // Cancelled: whatever FFmpeg had written so far goes.
+      await rm(file, { force: true }).catch(() => {})
+      return null
     } finally {
+      exporting.delete(exportId)
       report(null)
     }
     shell.showItemInFolder(file)
-    return res.filePath
+    return file
   })
   handle('songs:relink', async (id: string) => {
     const song = requireSong(id)
@@ -701,7 +715,7 @@ function buildMenu() {
         { label: mac ? 'Show Project in Finder' : 'Show Project Folder', click: () => projects.filePath && shell.showItemInFolder(projects.filePath) },
         { type: 'separator' },
         { label: 'Close Project', click: () => void closeProject() },
-        { label: 'Delete Project…', click: () => void deleteProject() },
+        { label: 'Delete Project…', click: () => void deleteProject().catch((e) => dialog.showErrorBox('Could not delete the project', String(e?.message ?? e))) },
         ...(mac ? [] : [{ type: 'separator' } as const, { role: 'quit' } as const])
       ]
     },
@@ -847,6 +861,7 @@ app.on('before-quit', (e) => {
   quitting = true
   void (async () => {
     try {
+      await takes.discard()
       await capturePluginStates()
       await projects.flush()
     } finally {

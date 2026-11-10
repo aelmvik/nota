@@ -120,6 +120,32 @@ describe('beat grid', () => {
   })
 })
 
+describe('count-in', () => {
+  const song = (over: Record<string, unknown> = {}) => ({
+    tempo: null,
+    beatsPerBar: null,
+    gridScale: 1 as 0.5 | 1 | 2,
+    analysis: { status: 'ready' as const, bpm: 100, beatsPerBar: 4 },
+    ...over
+  })
+  /** How long one bar of count-in lasts, as the player works it out. */
+  const barSeconds = (s: ReturnType<typeof song>) => (M.beatsPerBarOf(s) * 60) / M.bpmOf(s)!
+
+  it('lasts one bar of the song in half and double time too', () => {
+    expect(barSeconds(song())).toBeCloseTo(2.4)
+    expect(M.beatsPerBarOf(song({ gridScale: 2 }))).toBe(8)
+    expect(barSeconds(song({ gridScale: 2 }))).toBeCloseTo(2.4)
+    expect(M.beatsPerBarOf(song({ gridScale: 0.5 }))).toBe(2)
+    expect(barSeconds(song({ gridScale: 0.5 }))).toBeCloseTo(2.4)
+  })
+
+  it('keeps a meter set by hand, and ignores half/double time under a manual tempo', () => {
+    expect(M.beatsPerBarOf(song({ gridScale: 2, beatsPerBar: 3 }))).toBe(3)
+    expect(M.beatsPerBarOf(song({ gridScale: 2, tempo: { bpm: 90, offset: 0 } }))).toBe(4)
+    expect(M.beatsPerBarOf(song({ analysis: { status: 'pending' as const } }))).toBe(4)
+  })
+})
+
 describe('tap tempo', () => {
   it('needs three taps and ignores taps after a pause', () => {
     expect(M.tapTempo([0, 0.5])).toBeNull()

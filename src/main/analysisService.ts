@@ -78,8 +78,11 @@ export class AnalysisService {
   }
 
   async enqueue(hash: string, path: string) {
-    if (this.running === hash || this.queue.some((j) => j.hash === hash)) return
+    const has = () => this.running === hash || this.queue.some((j) => j.hash === hash)
+    if (has()) return
     const cached = await this.read(hash)
+    // Asked for twice at once: the other call queued it while the cache was read.
+    if (has()) return
     if (cached) return this.listener(hash, summarize(cached))
     if (!this.env.python()) {
       return this.listener(hash, { status: 'unavailable', error: 'The analysis environment is not installed' })
@@ -106,7 +109,7 @@ export class AnalysisService {
       await writeFileAtomic(target, JSON.stringify(result))
       if (root === this.root()) this.listener(job.hash, summarize(result))
     } catch (err) {
-      if (root === this.root()) this.listener(job.hash, { status: 'failed', error: err instanceof Error ? err.message : String(err) })
+      if (root === this.root()) this.listener(job.hash, { status: 'failed', version: ANALYSIS_FORMAT, error: err instanceof Error ? err.message : String(err) })
     } finally {
       this.running = null
       void this.pump()

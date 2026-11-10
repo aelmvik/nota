@@ -1,6 +1,6 @@
 import { recoverAfterRestart } from './processing'
 import { clampPitch, tempoFromBpm } from './music'
-import type { AudioConfig, MetronomeSettings, PlaybackMode, Project, Song, SongPatch, SpeedTrainer, StemKind } from './types'
+import type { AudioConfig, EffectSlot, MetronomeSettings, PlaybackMode, Project, Song, SongPatch, SpeedTrainer, StemKind } from './types'
 import { normalizeCuts } from './cuts'
 import { normalizeNotes } from './noteEdit'
 
@@ -181,7 +181,7 @@ export function clampSpeed(speed: number): number {
 }
 
 export function normalizeLoop(loop: SongPatch['loop'], duration: number): Song['loop'] {
-  if (loop == null) return null
+  if (loop == null || !Number.isFinite(loop.start) || !Number.isFinite(loop.end)) return null
   let start = Math.max(0, Math.min(loop.start, loop.end))
   let end = Math.max(loop.start, loop.end)
   if (duration > 0) {
@@ -203,11 +203,12 @@ export function updateSong(p: Project, id: string, patch: SongPatch): Project {
       // active once its stems are ready. Playback falls back meanwhile.
       next.mode = patch.mode
     }
-    if (patch.volume !== undefined) next.volume = Math.min(MAX_VOLUME, Math.max(0, patch.volume))
+    // A value that isn't a number (NaN from a slip in the window's maths) changes nothing.
+    if (patch.volume !== undefined && Number.isFinite(patch.volume)) next.volume = Math.min(MAX_VOLUME, Math.max(0, patch.volume))
     if (patch.speed !== undefined) next.speed = clampSpeed(patch.speed)
     if (patch.loop !== undefined) next.loop = normalizeLoop(patch.loop, s.durationSec)
     if (patch.cuts !== undefined) next.cuts = normalizeCuts(patch.cuts, s.durationSec)
-    if (patch.position !== undefined)
+    if (patch.position !== undefined && Number.isFinite(patch.position))
       next.position = Math.max(0, Math.min(s.durationSec || Infinity, patch.position))
     if (patch.pitch !== undefined) next.pitch = clampPitch(patch.pitch)
     if (patch.tempo !== undefined) next.tempo = patch.tempo ? tempoFromBpm(patch.tempo.bpm, patch.tempo.offset) : null
@@ -283,17 +284,21 @@ export function parseProject(json: string): Project {
   const songs: Song[] = raw.songs.map((s: unknown, i: number) => {
     if (!isObject(s) || !isObject(s.source) || typeof s.source.path !== 'string' || typeof s.source.hash !== 'string')
       throw new ProjectError(`Song ${i + 1} in the project file is damaged`)
-    const song = s as unknown as Song
+    const stored = s as unknown as Song
+    // A song without a usable id or length (a hand-edited file) gets one, so the rest of the app can rely on them.
+    const song: Song = { ...stored, durationSec: Number.isFinite(stored.durationSec) && stored.durationSec > 0 ? stored.durationSec : 0 }
     return {
       ...song,
+      id: typeof song.id === 'string' && song.id ? song.id : newId(),
+      title: typeof song.title === 'string' && song.title.trim() ? song.title : 'Untitled',
       artist: song.artist ?? null,
       playbackProxy: song.playbackProxy ?? null,
       mode: (['original', 'bass', 'playalong'] as const).includes(song.mode) ? song.mode : 'original',
-      volume: typeof song.volume === 'number' ? song.volume : 1,
+      volume: Number.isFinite(song.volume) ? Math.min(MAX_VOLUME, Math.max(0, song.volume)) : 1,
       speed: clampSpeed(song.speed ?? 1),
       loop: song.loop ? normalizeLoop(song.loop, song.durationSec) : null,
       cuts: normalizeCuts(Array.isArray(song.cuts) ? song.cuts : [], song.durationSec),
-      position: typeof song.position === 'number' ? song.position : 0,
+      position: Number.isFinite(song.position) ? Math.max(0, Math.min(song.durationSec || Infinity, song.position)) : 0,
       stems: isObject(song.stems) ? song.stems : {},
       pitch: song.pitch ? clampPitch(song.pitch) : { semitones: 0, cents: 0 },
       tempo: song.tempo && song.tempo.bpm > 0 ? tempoFromBpm(song.tempo.bpm, song.tempo.offset ?? 0) : null,
@@ -342,4 +347,10 @@ export function addPractice(p: Project, songId: string | null, seconds: number):
     practiceSec: p.practiceSec + seconds,
     songs: songId ? p.songs.map((s) => (s.id === songId ? { ...s, practiceSec: s.practiceSec + seconds } : s)) : p.songs
   }
+}
+
+/** `project` with the plugin states captured in `captured`, slot by slot: its effects stay as they are now. */
+export function withEffectStates(project: Project, captured: readonly EffectSlot[]): Project {
+  const states = new Map(captured.map((e) => [e.slotId, e.state]))
+  return { ...project, effects: project.effects.map((e) => (states.has(e.slotId) ? { ...e, state: states.get(e.slotId) ?? e.state } : e)) }
 }
